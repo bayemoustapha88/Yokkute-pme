@@ -1,9 +1,11 @@
 /* Yokkute PME — cache hors ligne de l'application. Changez VERSION à chaque mise à jour publiée. */
-var VERSION = "yokkute-v1.0.1";
+var VERSION = "yokkute-v1.1.0";
 var FICHIERS = ["./", "index.html", "manifest.webmanifest", "app.css",
   "config.js", "referentiel.js", "store.js", "excel.js", "app.js",
   "firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js", "xlsx.full.min.js",
-  "icon-192.png", "icon-512.png"];
+  "icon-192.png", "icon-512.png",
+  "MC1_Outils_participants.xlsx", "MC2_Outils_participants.xlsx", "MC3_Outils_participants.xlsx", "MC4_Outils_participants.xlsx", "MC5_Outils_participants.xlsx",
+  "MC6_Outils_participants.xlsx", "MC7_Outils_participants.xlsx", "MC8_Outils_participants.xlsx", "MC9_Outils_participants.xlsx", "MC10_Outils_participants.xlsx"];
 self.addEventListener("install", function(e){ e.waitUntil(caches.open(VERSION).then(function(c){ return c.addAll(FICHIERS); }).then(function(){ return self.skipWaiting(); })); });
 self.addEventListener("activate", function(e){ e.waitUntil(caches.keys().then(function(k){ return Promise.all(k.filter(function(n){ return n!==VERSION; }).map(function(n){ return caches.delete(n); })); }).then(function(){ return self.clients.claim(); })); });
 self.addEventListener("fetch", function(e){

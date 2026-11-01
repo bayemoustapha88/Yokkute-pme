@@ -5,6 +5,7 @@
 (function(){
   var CFG = window.YK_CONFIG, COLS = ["entreprises","bibliotheque","membres","taches","journal"];
   var DB = { mode:"local", user:null, pending:false, online:navigator.onLine };
+  var CHUNK = 700000;
   var listeners = {}, userCbs = [], statusCbs = [];
   function emitStatus(){ statusCbs.forEach(function(f){ try{ f(DB); }catch(e){ console.error(e); } }); }
   window.addEventListener("online", function(){ DB.online=true; emitStatus(); });
@@ -61,6 +62,19 @@
     DB.save = function(col, id, data){ return fs.collection(col).doc(String(id)).set(clean(data)); };
     DB.add = function(col, data){ var ref = fs.collection(col).doc(); data.id = ref.id; ref.set(clean(data)); return ref.id; };
     DB.del = function(col, id){ return fs.collection(col).doc(String(id)).delete(); };
+    /* Fichiers découpés en morceaux de 700 000 caractères (base64), un document par morceau.
+       Les écritures sont mises en file d'attente sur l'appareil : elles partent dès que le réseau revient. */
+    DB.putFile = function(col, id, b64){
+      var n = Math.max(1, Math.ceil(b64.length/CHUNK));
+      for(var i=0;i<n;i++){ fs.collection(col).doc(id+"_"+i).set({id:id, i:i, n:n, data:b64.slice(i*CHUNK,(i+1)*CHUNK)}).catch(function(e){ console.error("Envoi du fichier", e); toastGlobal("Envoi d'une pièce jointe refusé : "+(e && e.code || e)); }); }
+      return Promise.resolve(n);
+    };
+    DB.getFile = function(col, id, n){
+      var ps=[]; for(var i=0;i<n;i++) ps.push(fs.collection(col).doc(id+"_"+i).get());
+      return Promise.all(ps).then(function(ds){ return ds.map(function(d){ if(!d.exists) throw new Error("morceau manquant (fichier encore en cours d'envoi ?)"); return d.data().data; }).join(""); });
+    };
+    DB.delFile = function(col, id, n){ var ps=[]; for(var i=0;i<n;i++) ps.push(fs.collection(col).doc(id+"_"+i).delete()); return Promise.all(ps); };
+    DB.getAll = function(col){ return fs.collection(col).get().then(function(snap){ return snap.docs.map(function(d){ var x=d.data(); x._id=d.id; return x; }); }); };
   } else {
     /* ---------- mode local ---------- */
     var KEY = "yokkute_local_";
@@ -79,6 +93,11 @@
     DB.save = function(col, id, data){ var o=read(col); o[String(id)]=clean(data); write(col,o); setTimeout(function(){ fire(col); },0); return Promise.resolve(); };
     DB.add = function(col, data){ var id = col.slice(0,2)+Date.now().toString(36)+Math.random().toString(36).slice(2,6); data.id=id; DB.save(col,id,data); return id; };
     DB.del = function(col, id){ var o=read(col); delete o[String(id)]; write(col,o); setTimeout(function(){ fire(col); },0); return Promise.resolve(); };
+    /* Mode local : les fichiers vont dans le stockage du navigateur, limité à quelques Mo. */
+    DB.putFile = function(col, id, b64){ try{ localStorage.setItem(KEY+"f_"+col+"_"+id, b64); return Promise.resolve(1); }catch(e){ return Promise.reject(new Error("stockage de l'appareil plein (mode local)")); } };
+    DB.getFile = function(col, id){ var v=localStorage.getItem(KEY+"f_"+col+"_"+id); return v==null ? Promise.reject(new Error("fichier introuvable sur cet appareil")) : Promise.resolve(v); };
+    DB.delFile = function(col, id){ localStorage.removeItem(KEY+"f_"+col+"_"+id); return Promise.resolve(); };
+    DB.getAll = function(col){ var o=read(col); return Promise.resolve(Object.keys(o).map(function(k){ var x=o[k]; x._id=k; return x; })); };
   }
   function toastGlobal(m){ if(window.ykToast) window.ykToast(m); }
   DB.listen = function(col, f){ (listeners[col]=listeners[col]||[]).push(f); };

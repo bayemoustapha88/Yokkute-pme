@@ -2,13 +2,13 @@
 "use strict";
 (function(){
 var DB = window.YK_DB, CFG = window.YK_CONFIG, OWNER = String(CFG.ownerEmail).toLowerCase();
-var ENT = [], MEMBRES = [], TACHES = [], JOURNAL = [];
+var ENT = [], MEMBRES = [], TACHES = [], JOURNAL = [], RESS = {};
 var ME = null;               /* {email, nom, role} */
 var LOADED = {};
 var EDIT_VIEWS = ["diag","newent","pdi","visite","tachenew"];
 var S = {view:"tableau", id:null, diag:null, f:{q:"",seg:"",feu:"",cons:""}, open:{}, bseg:"", bnat:"", addFor:null, edit:null,
          newEnt:null, editId:null, dup:null, imp:null, conf:null, newTask:null, tf:{statut:"ouvertes", qui:""},
-         rap:{type:"mois", annee:Number(TODAY.slice(0,4)), idx:Number(TODAY.slice(5,7))}, stale:false, menu:false};
+         rap:{type:"mois", annee:Number(TODAY.slice(0,4)), idx:Number(TODAY.slice(5,7))}, stale:false, menu:false, rseg:"", busy:0};
 
 /* ================= Outils ================= */
 function esc(s){ return String(s==null?"":s).replace(/[&<>"']/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
@@ -55,12 +55,13 @@ var IC = {
  taches:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 6h11M9 12h11M9 18h11"/><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"/></svg>',
  rapports:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
  biblio:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg>',
+ ressources:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg>',
  equipe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14c3 0 5 2 5 5"/></svg>'
 };
 function navItems(){
   var n=[["tableau","Tableau de bord","Accueil"],["entreprises","Entreprises","Entreprises"]];
   if(canCreate()) n.push(["diag","Diagnostic","Diagnostic"],["taches","Tâches","Tâches"]);
-  n.push(["rapports","Rapports d'activités","Rapports"],["biblio","Bibliothèque d'actions","Actions"],["equipe", isOwner()?"Équipe et partage":"Équipe et exports","Équipe"]);
+  n.push(["rapports","Rapports d'activités","Rapports"],["biblio","Bibliothèque d'actions","Actions"],["ressources","Masterclasses et outils","Outils"],["equipe", isOwner()?"Équipe et partage":"Équipe et exports","Équipe"]);
   return n;
 }
 function mesTachesOuvertes(){ return TACHES.filter(function(t){ return t.assigneA===ME.email && t.statut!=="Fait"; }); }
@@ -324,7 +325,13 @@ function vFiche(){
     h+='</section>'; }
   var done=(e.pdi||[]).filter(function(p){return p.statut==="Fait";}).length;
   h+='<section class="card"><div class="row between"><h2>Plan de Développement Individuel</h2><span class="small muted num">'+done+' / '+(e.pdi||[]).length+' réalisées'+(e.pdiValide?' · validé le '+fd(e.pdiValide):' · non validé')+'</span></div><div class="bar"><span style="width:'+(done/Math.max(1,(e.pdi||[]).length)*100)+'%;background:var(--good)"></span></div>';
-  (e.pdi||[]).forEach(function(p){ var late=p.statut!=="Fait"&&p.echeance<TODAY; h+='<div class="row between" style="flex-wrap:nowrap;align-items:flex-start;padding:4px 0"><div style="min-width:0"><b>'+esc(p.reco)+'</b><div class="small">'+esc(p.action)+'</div>'+(p.outil?'<div class="small">Outil ou modèle : '+esc(p.outil)+'</div>':'')+'<div class="small muted">'+DIMS[p.dim].court+' · du '+fd(p.debut)+' au '+fd(p.echeance)+' · '+esc(p.partenaire)+(late?' · <b class="ko">en retard</b>':'')+'</div></div>'+stat(p.statut)+'</div>'; });
+  (e.pdi||[]).forEach(function(p){ var late=p.statut!=="Fait"&&p.echeance<TODAY; h+='<div class="row between" style="flex-wrap:nowrap;align-items:flex-start;padding:4px 0"><div style="min-width:0"><b>'+esc(p.reco)+'</b><div class="small">'+esc(p.action)+'</div>'+(p.outil?'<div class="small">Outil ou modèle : '+esc(p.outil)+'</div>':'')+mcLiens(p)+'<div class="small muted">'+DIMS[p.dim].court+' · du '+fd(p.debut)+' au '+fd(p.echeance)+' · '+esc(p.partenaire)+(late?' · <b class="ko">en retard</b>':'')+'</div></div>'+stat(p.statut)+'</div>'; });
+  h+='</section>';
+  var pjs=e.pieces||[];
+  h+='<section class="card"><div class="row between"><h2>Pièces justificatives</h2><span class="small muted">'+pjs.length+' fichier(s)</span></div>';
+  if(!pjs.length) h+='<p class="empty">Aucune pièce jointe. Elles s\'ajoutent pendant le diagnostic (par dimension), dans le PDI ou lors d\'une visite (par action).</p>';
+  var cibles=[]; pjs.forEach(function(x){ if(cibles.indexOf(x.cible)<0) cibles.push(x.cible); });
+  cibles.sort().forEach(function(c){ h+='<div style="padding:6px 0;border-bottom:1px solid var(--line)"><b class="small">'+esc(cibleLabel(e,c))+'</b>'+pjs.filter(function(x){return x.cible===c;}).map(function(x){ return '<div class="pjrow"><button class="linkbtn" data-act="pdl" data-ent="'+esc(e.id)+'" data-id="'+esc(x.id)+'">'+esc(x.nom)+'</button><span class="small muted">'+pjIcone(x.nom)+' · '+taille(x.taille)+' · '+fd(x.date)+'</span></div>'; }).join("")+'</div>'; });
   h+='</section><section class="card"><div class="row between"><h2>Historique des visites</h2>'+(ce?'<button class="btn ghost" data-act="visite" data-id="'+esc(e.id)+'">+ Nouvelle visite</button>':'')+'</div><div class="timeline">';
   if(!(e.visites||[]).length) h+='<p class="empty">Aucune visite de suivi enregistrée.</p>';
   (e.visites||[]).slice().reverse().forEach(function(v){ h+='<div class="ev"><div><b>'+fd(v.date)+'</b><div>'+feuChip(v.feu)+'</div></div><div><p>'+esc(v.obs)+'</p>'+(v.ca?'<p class="small muted">CA du mois relevé : '+money(v.ca)+'</p>':'')+'<p class="small muted">'+esc(court(v.auteur))+(v.prochaine?" · prochaine visite prévue le "+fd(v.prochaine):"")+'</p></div></div>'; });
@@ -398,6 +405,7 @@ function vDiag(){
         '<label class="f">Charges mensuelles moyennes (FCFA)<input type="number" min="0" step="1000" id="fin_charges" value="'+(F.charges==null?"":F.charges)+'"></label>'+
         '<div class="f"><span class="small muted" style="font-weight:600">Bénéfice mensuel estimé</span><b class="num" id="fin_benef" style="font-size:1.15rem">'+money(benef(F))+'</b></div>'+
         '<label class="f">Source de l\'information<select id="fin_source">'+["Déclaration orale","Cahier de caisse vérifié"].map(function(t){return '<option'+(F.source===t?" selected":"")+'>'+t+'</option>';}).join("")+'</select></label></div></section>'; }
+    h+='<section class="card"><h3>Pièces justificatives</h3><p class="small muted">Joignez ici les preuves vues sur place pour cette dimension (photo du cahier de caisse, RCCM, facture, catalogue…). Elles sont enregistrées tout de suite dans la fiche de l\'entreprise.</p>'+piecesHTML(e,"d"+st)+'</section>';
     h+='<section class="card"><h3>Note de la dimension</h3><div class="propose"><span>Note proposée d\'après '+(D.volets?"les volets":"les repères cochés")+' :</span><b class="num">'+prop+'</b><span class="small muted">'+D.g[prop-1]+'</span><button class="btn sm" data-act="useprop" data-n="'+prop+'">Retenir cette note</button></div>'+
       '<p class="small muted">Vous pouvez aussi noter librement en vous référant à la grille ci-dessous.</p><div class="scale" role="radiogroup" aria-label="Note de 1 à 5">';
     D.g.forEach(function(g,k){ var id="n"+st+"_"+(k+1); h+='<label for="'+id+'"><input type="radio" name="note'+st+'" id="'+id+'" value="'+(k+1)+'"'+(d.notes[st]===k+1?" checked":"")+'><b>'+(k+1)+'</b><span>'+g+'</span>'+(prop===k+1?'<span class="prop">proposée</span>':'')+'</label>'; });
@@ -472,6 +480,7 @@ function vPDI(){
       '<label class="f">Échéance<input type="date" data-p="'+i+'" data-k="echeance" value="'+p.echeance+'"'+dis+'></label>'+
       '<label class="f">Statut<select data-p="'+i+'" data-k="statut"'+dis+'>'+["À faire","En cours","Fait"].map(function(x){return '<option'+(x===p.statut?" selected":"")+'>'+x+'</option>';}).join("")+'</select></label>'+
       '<label class="f full">Livrable vérifiable<input type="text" data-p="'+i+'" data-k="livrable" value="'+esc(p.livrable)+'"'+dis+'></label>'+
+      '<div class="full">'+mcLiens(p)+piecesHTML(e, p.pid?"p:"+p.pid:"p:-", i)+'</div>'+
       (rd?'':'<div class="full">'+adder("i"+i, p.dim)+'</div>')+'</div>'; });
   if(!rd){ var present={}; e.pdi.forEach(function(p){present[p.dim]=1;});
     h+='<section class="card"><h3>Ajouter une action pour une autre dimension</h3><div style="display:flex;flex-direction:column;gap:8px">';
@@ -492,6 +501,134 @@ function pdiPrintHTML(e){
 }
 function printHTML(html){ var p=document.getElementById("print"); p.innerHTML=html; document.body.classList.add("printing"); setTimeout(function(){ window.print(); setTimeout(function(){ document.body.classList.remove("printing"); },500); },100); }
 
+
+/* ================= Pièces justificatives et supports des masterclasses ================= */
+var PJ_MAX = 5*1024*1024, PJ_ACCEPT = ".png,.jpg,.jpeg,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt";
+function taille(o){ return o<1024*1024 ? Math.max(1,Math.round(o/1024))+" Ko" : nf(Math.round(o/1048576*10)/10)+" Mo"; }
+function pjIcone(nom){ var x=String(nom).split(".").pop().toLowerCase(); return /png|jpe?g|webp/.test(x)?"Image":x==="pdf"?"PDF":/docx?/.test(x)?"Word":/xlsx?|csv/.test(x)?"Excel":/pptx?/.test(x)?"PowerPoint":"Fichier"; }
+function lireB64(blob){ return new Promise(function(ok,ko){ var r=new FileReader(); r.onload=function(){ ok(String(r.result).split(",")[1]||""); }; r.onerror=function(){ ko(r.error); }; r.readAsDataURL(blob); }); }
+/* Les photos de plus de 300 Ko sont réduites (1600 px, JPEG) pour rester légères sur le réseau mobile. */
+function compresser(f){
+  if(!/^image\/(png|jpe?g|webp)$/.test(f.type) || f.size<300*1024) return Promise.resolve({blob:f, nom:f.name, type:f.type||"application/octet-stream"});
+  return new Promise(function(ok){ var img=new Image(), u=URL.createObjectURL(f);
+    img.onload=function(){ var k=Math.min(1,1600/Math.max(img.width,img.height)), c=document.createElement("canvas"); c.width=Math.round(img.width*k); c.height=Math.round(img.height*k);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(u);
+      c.toBlob(function(b){ ok(b && b.size<f.size ? {blob:b, nom:f.name.replace(/\.\w+$/,"")+".jpg", type:"image/jpeg"} : {blob:f, nom:f.name, type:f.type}); },"image/jpeg",0.8); };
+    img.onerror=function(){ URL.revokeObjectURL(u); ok({blob:f, nom:f.name, type:f.type}); };
+    img.src=u; });
+}
+function telecharger(nom, type, b64){
+  var bin=atob(b64), a=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i);
+  var url=URL.createObjectURL(new Blob([a],{type:type||"application/octet-stream"})), l=document.createElement("a");
+  l.href=url; l.download=nom; document.body.appendChild(l); l.click(); setTimeout(function(){ URL.revokeObjectURL(url); l.remove(); },2000);
+}
+function cibleLabel(e, c){
+  if(c.charAt(0)==="d") return "Diagnostic · "+DIMS[Number(c.slice(1))].nom;
+  var p=(e.pdi||[]).filter(function(x){ return "p:"+x.pid===c; })[0];
+  return p ? "PDI · "+p.action : "PDI · action retirée";
+}
+/* Bloc des pièces d'une cible : "d3" (dimension 4 du diagnostic) ou "p:<id de l'action>" */
+function piecesHTML(e, cible, idxPdi){
+  var L=(e.pieces||[]).filter(function(x){ return x.cible===cible; }), ed=canEdit(e);
+  var h='<div class="pj"><div class="row between"><b class="small">Pièces justificatives'+(L.length?' ('+L.length+')':'')+'</b>'+
+    (ed?'<label class="btn sm ghost pjadd">+ Joindre un fichier<input type="file" multiple accept="'+PJ_ACCEPT+'" data-pup="'+esc(cible)+'" data-pent="'+esc(e.id)+'"'+(idxPdi!=null?' data-pidx="'+idxPdi+'"':'')+' hidden></label>':'')+'</div>';
+  if(!L.length) h+='<p class="small muted">'+(ed?'Photo, PDF, Word ou Excel, 5 Mo au plus par fichier. Les photos sont allégées automatiquement.':'Aucune pièce jointe.')+'</p>';
+  L.forEach(function(x){ h+='<div class="pjrow"><button class="linkbtn" data-act="pdl" data-ent="'+esc(e.id)+'" data-id="'+esc(x.id)+'">'+esc(x.nom)+'</button><span class="small muted">'+pjIcone(x.nom)+' · '+taille(x.taille)+' · '+fd(x.date)+' · '+esc(court(x.auteur))+'</span>'+
+    (ed?'<button class="btn ghost danger sm" data-act="pdel" data-ent="'+esc(e.id)+'" data-id="'+esc(x.id)+'">Retirer</button>':'')+'</div>'; });
+  return h+'</div>';
+}
+function joindre(input){
+  var e=byId(input.getAttribute("data-pent")), cible=input.getAttribute("data-pup"), files=[].slice.call(input.files||[]);
+  input.value=""; if(!e || !canEdit(e) || !files.length) return;
+  if(input.hasAttribute("data-pidx")){ var p=e.pdi[Number(input.getAttribute("data-pidx"))]; if(!p.pid) p.pid="a"+Date.now().toString(36)+Math.random().toString(36).slice(2,5); cible="p:"+p.pid; }
+  S.busy++; toast("Préparation de "+files.length+" fichier(s)…");
+  Promise.all(files.map(function(f){ return compresser(f).then(function(c){
+    if(c.blob.size>PJ_MAX) throw new Error("« "+f.name+" » dépasse 5 Mo : réduisez-le ou scannez-le en qualité plus faible");
+    return lireB64(c.blob).then(function(b64){ var id="pj"+Date.now().toString(36)+Math.random().toString(36).slice(2,6);
+      return DB.putFile("fichiers", id, b64).then(function(n){ return {id:id, nom:c.nom, type:c.type, taille:c.blob.size, n:n, cible:cible, date:TODAY, auteur:ME.email}; }); }); }); }))
+  .then(function(metas){ e.pieces=(e.pieces||[]).concat(metas); saveEnt(e); journal("piece_jointe", e, metas.length+" pièce(s) jointe(s) · "+cibleLabel(e,cible)); toast(metas.length+" pièce(s) jointe(s)."+(DB.online?"":" Elles partiront au retour du réseau.")); })
+  .catch(function(err){ toast("Pièce non jointe : "+(err && err.message || err)); })
+  .then(function(){ S.busy--; render(); });
+}
+function ouvrirPiece(e, id){
+  var x=(e.pieces||[]).filter(function(z){return z.id===id;})[0]; if(!x) return;
+  toast("Téléchargement de « "+x.nom+" »…");
+  DB.getFile("fichiers", x.id, x.n||1).then(function(b64){ telecharger(x.nom, x.type, b64); }).catch(function(err){ toast("Fichier indisponible : "+(err && err.message || err)); });
+}
+function retirerPiece(e, id){
+  var x=(e.pieces||[]).filter(function(z){return z.id===id;})[0]; if(!x || !canEdit(e)) return;
+  if(S.confirmPj!==id){ S.confirmPj=id; toast("Cliquez une seconde fois sur « Retirer » pour supprimer « "+x.nom+" »."); return; }
+  S.confirmPj=null; e.pieces=e.pieces.filter(function(z){return z.id!==id;}); saveEnt(e);
+  DB.delFile("fichiers", x.id, x.n||1).catch(function(err){ console.warn(err); }); journal("piece_jointe", e, "Pièce retirée : "+x.nom); toast("Pièce retirée."); render();
+}
+/* Lien vers les outils de la masterclass qui correspond à une action du PDI */
+function mcLiens(p){
+  var c=mcOf(p); if(!c || !MC[c]) return "";
+  var h='<div class="mclink small"><span class="tag">'+c+'</span> '+esc(MC[c].t)+' · <a href="'+mcFichier(c)+'" download>classeur des outils (Excel)</a>';
+  if(canCreate()) ["guide","diaporama"].forEach(function(k){ var r=RESS[c+"_"+k]; if(r) h+=' · <button class="linkbtn" data-act="resdl" data-id="'+esc(r._id)+'">'+(k==="guide"?"guide du formateur":"diaporama")+'</button>'; });
+  return h+'</div>';
+}
+function loadRes(){
+  if(!DB.getAll) return;
+  DB.getAll("ressources").then(function(docs){ RESS={}; docs.forEach(function(d){ RESS[d._id]=d; }); LOADED.ress=true; refresh(); }).catch(function(err){ console.warn("Supports formateur :", err && err.code); });
+}
+var RES_KINDS = {guide:"Guide du formateur", diaporama:"Diaporama", kit:"Kit de mise en œuvre des PDI", autre:"Autre support"};
+function resKind(nom){ var n=cle(nom); return /KIT/.test(n)?"kit":/GUIDE/.test(n)?"guide":/DIAPO|SLIDE|PRESENTATION|DECK/.test(n)?"diaporama":"autre"; }
+function resCode(nom){ var m=cle(nom).match(/MC\s*0?(\d{1,2})(?!\d)/); return m && MC["MC"+Number(m[1])] ? "MC"+Number(m[1]) : (/KIT/.test(cle(nom))?"KIT":null); }
+function televerserRes(input){
+  var files=[].slice.call(input.files||[]); input.value=""; if(!isOwner() || !files.length) return;
+  var ok=[], ko=[];
+  files.forEach(function(f){ var c=resCode(f.name), k=resKind(f.name); if(!c || (c!=="KIT" && k==="autre")) ko.push(f.name); else ok.push({f:f, id:(c==="KIT"?"KIT_kit":c+"_"+k), code:c, kind:c==="KIT"?"kit":k}); });
+  if(ko.length) toast("Non reconnus (le nom doit contenir MC1…MC10 et « guide » ou « diaporama ») : "+ko.join(", "));
+  if(!ok.length) return;
+  S.busy++; render();
+  Promise.all(ok.map(function(o){
+    if(o.f.size>15*1024*1024) return Promise.reject(new Error("« "+o.f.name+" » dépasse 15 Mo"));
+    return lireB64(o.f).then(function(b64){ var old=RESS[o.id];
+      var fid=o.id+"_"+Date.now().toString(36);
+      return DB.putFile("ressources_parts", fid, b64).then(function(n){
+        var meta={fid:fid, code:o.code, kind:o.kind, nom:o.f.name, type:o.f.type||"application/pdf", taille:o.f.size, n:n, date:TODAY, auteur:ME.email};
+        DB.save("ressources", o.id, meta); meta._id=o.id; RESS[o.id]=meta;
+        if(old && old.fid) DB.delFile("ressources_parts", old.fid, old.n||1).catch(function(){});
+      }); }); }))
+  .then(function(){ toast(ok.length+" support(s) enregistré(s)."); })
+  .catch(function(err){ toast("Téléversement interrompu : "+(err && err.message || err)); })
+  .then(function(){ S.busy--; render(); });
+}
+function ouvrirRes(id){
+  var r=RESS[id]; if(!r) return; toast("Téléchargement de « "+r.nom+" »…");
+  DB.getFile("ressources_parts", r.fid, r.n||1).then(function(b64){ telecharger(r.nom, r.type, b64); }).catch(function(err){ toast("Support indisponible : "+(err && err.message || err)); });
+}
+function vRessources(){
+  var seg=S.rseg, form=canCreate();
+  var h='<div><p class="eyebrow">Parcours de masterclasses</p><h1>Masterclasses et outils</h1></div>';
+  h+='<p class="muted" style="max-width:75ch">Chaque masterclass de 3 h 30 s\'accompagne d\'un classeur Excel d\'outils pour les participants, avec un cas pratique corrigé.'+(form?' Les guides du formateur et les diaporamas sont réservés aux conseillers.':'')+' Choisissez un segment pour voir les masterclasses à proposer.</p>';
+  h+='<div class="row segtabs">'+[["","Toutes"],["A","A · "+SEGLAB.A],["B","B · "+SEGLAB.B],["C","C · "+SEGLAB.C]].map(function(o){ return '<button class="btn sm'+(seg===o[0]?" primary":"")+'" data-act="rseg" data-s="'+o[0]+'">'+o[1]+'</button>'; }).join("")+'</div>';
+  var codes=Object.keys(MC);
+  function carte(c, niveau){
+    var M=MC[c], pq=seg && MC_POURQUOI[seg] && MC_POURQUOI[seg][c];
+    var x='<section class="card mc"><div class="row between"><div><p class="eyebrow">'+c+(niveau?' · '+niveau:'')+'</p><h2>'+esc(M.t)+'</h2></div><div class="row">'+["A","B","C"].map(function(s){ var r=M.rec.indexOf(s)>=0, b=M.bes.indexOf(s)>=0; return r||b ? '<span class="seg '+s+'" title="'+(r?"Recommandée":"Selon le diagnostic")+'">'+s+(b?" ·":"")+'</span>' : ''; }).join("")+'</div></div>';
+    if(pq) x+='<p class="small"><b>Quand la proposer :</b> '+esc(pq)+'.</p>';
+    x+='<div class="row"><a class="btn sm" href="'+mcFichier(c)+'" download>Classeur des participants (Excel)</a>';
+    if(form) ["guide","diaporama"].forEach(function(k){ var r=RESS[c+"_"+k]; x+= r ? '<button class="btn sm ghost" data-act="resdl" data-id="'+esc(r._id)+'">'+RES_KINDS[k]+' (PDF · '+taille(r.taille)+')</button>' : '<span class="small muted">'+RES_KINDS[k]+' : pas encore téléversé</span>'; });
+    x+='</div>';
+    var nb=0; ENT.forEach(function(e){ (e.pdi||[]).forEach(function(p){ if(mcOf(p)===c && p.statut!=="Fait") nb++; }); });
+    if(form && nb) x+='<p class="small muted">'+nb+' action(s) de PDI en cours s\'appuient sur cette masterclass.</p>';
+    return x+'</section>';
+  }
+  if(!seg) codes.forEach(function(c){ h+=carte(c,""); });
+  else {
+    var rec=codes.filter(function(c){ return MC[c].rec.indexOf(seg)>=0; }), bes=codes.filter(function(c){ return MC[c].bes.indexOf(seg)>=0; });
+    h+='<h2 style="margin-top:8px">Recommandées pour le segment '+seg+' · '+SEGLAB[seg]+'</h2>'; rec.forEach(function(c){ h+=carte(c,"Recommandée"); });
+    if(bes.length){ h+='<h2 style="margin-top:8px">À proposer selon le diagnostic</h2>'; bes.forEach(function(c){ h+=carte(c,"Selon le diagnostic"); }); }
+  }
+  if(form){ var kit=RESS.KIT_kit;
+    h+='<section class="card"><h2>Kit de mise en œuvre des PDI</h2><p class="small">Fiches de présence, d\'engagement et d\'évaluation, attestation, coaching sur site, grilles de vérification de MC1 à MC10, compte rendu.</p><div class="row">'+(kit?'<button class="btn sm" data-act="resdl" data-id="KIT_kit">Télécharger le kit (PDF · '+taille(kit.taille)+')</button>':'<span class="small muted">Pas encore téléversé</span>')+'</div></section>'; }
+  if(isOwner()) h+='<section class="card"><h2>Téléverser les supports du formateur</h2><p class="small">Sélectionnez un ou plusieurs PDF. Le nom de chaque fichier doit contenir le code de la masterclass (MC1 à MC10) et le mot « Guide » ou « Diaporama », par exemple <i>MC6_Guide_formateur.pdf</i> ; le kit doit contenir « Kit ». Un nouveau fichier remplace l\'ancien. Seuls le propriétaire et les conseillers peuvent les télécharger.</p>'+
+    '<label class="btn primary" style="align-self:flex-start">'+(S.busy?"Envoi en cours…":"Choisir les fichiers")+'<input type="file" multiple accept=".pdf,.pptx,.docx" data-resup="1" hidden></label>'+
+    (DB.mode==="local"?'<p class="small ko">Mode local : les supports restent sur cet appareil.</p>':'')+'</section>';
+  return h;
+}
 /* ================= Visite ================= */
 function vVisite(){
   var e=byId(S.id), d=S.vis;
@@ -500,7 +637,7 @@ function vVisite(){
     '<label class="f">Chiffre d\'affaires du mois écoulé (FCFA, si donné)<input type="number" min="0" step="1000" id="vca" value="'+(d.ca||"")+'"></label></div>'+
     (e.fin&&e.fin.caMois?'<p class="small muted">Référence au diagnostic : '+money(e.fin.caMois)+' par mois.</p>':'')+'</section>';
   h+='<section class="card"><h3>Avancement des actions du PDI</h3><p class="small muted">Vérifiez chaque livrable sur place avant de changer son statut.</p>';
-  (e.pdi||[]).forEach(function(p,i){ h+='<div class="row between" style="flex-wrap:nowrap;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><div style="min-width:0"><b>'+esc(p.action)+'</b><div class="small muted">'+(p.nature?NATURES[p.nature]+' · ':'')+modShort(p.module)+' · livrable : '+esc(p.livrable)+' · échéance '+fd(p.echeance)+(p.statut!=="Fait"&&p.echeance<TODAY?' <b class="ko">(en retard)</b>':'')+'</div></div><select data-vs="'+i+'" style="width:auto;flex:none" aria-label="Statut">'+["À faire","En cours","Fait"].map(function(x){return '<option'+(x===d.statuts[i]?" selected":"")+'>'+x+'</option>';}).join("")+'</select></div>'; });
+  (e.pdi||[]).forEach(function(p,i){ h+='<div class="row between" style="flex-wrap:nowrap;align-items:flex-start;padding:6px 0;border-bottom:1px solid var(--line)"><div style="min-width:0"><b>'+esc(p.action)+'</b><div class="small muted">'+(p.nature?NATURES[p.nature]+' · ':'')+modShort(p.module)+' · livrable : '+esc(p.livrable)+' · échéance '+fd(p.echeance)+(p.statut!=="Fait"&&p.echeance<TODAY?' <b class="ko">(en retard)</b>':'')+'</div>'+mcLiens(p)+piecesHTML(e, p.pid?"p:"+p.pid:"p:-", i)+'</div><select data-vs="'+i+'" style="width:auto;flex:none" aria-label="Statut">'+["À faire","En cours","Fait"].map(function(x){return '<option'+(x===d.statuts[i]?" selected":"")+'>'+x+'</option>';}).join("")+'</select></div>'; });
   h+='</section><section class="card"><h3>Appréciation globale</h3><div class="choice">'+["Vert","Orange","Rouge"].map(function(f){return '<label><input type="radio" name="vfeu" value="'+f+'"'+(d.feu===f?" checked":"")+'>'+feuChip(f)+'</label>';}).join("")+'</div>'+
     '<p class="small muted">Vert : dans les temps · Orange : retard rattrapable · Rouge : blocage.</p><label class="f">Observations et obstacles rencontrés<textarea id="vobs" placeholder="Ce qui a avancé, ce qui bloque, ce que le promoteur demande…">'+esc(d.obs)+'</textarea></label></section>';
   return h+'<div class="row between"><span></span><button class="btn primary" data-act="savevisite">Enregistrer la visite</button></div>';
@@ -551,7 +688,7 @@ function periode(r){
   else { a=y+"-01-01"; b=y+"-12-31"; lab="Année "+y+" (rapport annuel)"; f=String(y); }
   return {debut:a, fin:b, label:lab, fichier:f};
 }
-var JTYPES={entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution"};
+var JTYPES={entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution", piece_jointe:"Pièce justificative"};
 function calcRapport(){
   var P=periode(S.rap), inP=function(d){ return d && String(d).slice(0,10)>=P.debut && String(d).slice(0,10)<=P.fin; };
   var R={P:P, nouv:0, diags:[], pdiVal:0, actFaites:0, actRetard:0, actEnCours:0, visites:0, feux:{Vert:0,Orange:0,Rouge:0}, caVar:[], tCrees:0, tFaites:0, tRetard:0, besoins:{}, cons:{}, seg:{A:0,B:0,C:0}, volets:VOLETS.map(function(){return {o:0,app:0};}), formalisees:0};
@@ -690,7 +827,7 @@ function render(){
   try{
     if(v==="tableau") html=vTableau(); else if(v==="entreprises") html=vEntreprises(); else if(v==="newent") html=vEntForm(); else if(v==="fiche") html=vFiche();
     else if(v==="diag") html=S.diag?vDiag():vDiagPick(); else if(v==="pdi") html=vPDI(); else if(v==="visite") html=vVisite(); else if(v==="taches") html=vTaches();
-    else if(v==="rapports") html=vRapports(); else if(v==="biblio") html=vBiblio(); else html=vEquipe();
+    else if(v==="rapports") html=vRapports(); else if(v==="biblio") html=vBiblio(); else if(v==="ressources") html=vRessources(); else html=vEquipe();
   }catch(err){ console.error(err); html='<section class="card"><h2>Erreur d\'affichage</h2><p class="small">'+esc(err.message)+'</p><button class="btn" data-act="go" data-v="tableau">Retour au tableau de bord</button></section>'; }
   if(ME.role==="lecteur") html='<p class="ro-banner">Accès en lecture seule : vous consultez le portefeuille sans pouvoir le modifier.</p>'+html;
   app.innerHTML=html;
@@ -721,13 +858,19 @@ DB.listen("taches", function(docs){ TACHES=docs.map(function(d){ d.id=d.id||d._i
 DB.listen("journal", function(docs){ JOURNAL=docs; refresh(); });
 DB.listen("bibliotheque", function(docs){
   if(!docs.length){ LIB=JSON.parse(JSON.stringify(LIB_DEFAUT)); if(isOwner() && !LOADED.seeded){ LOADED.seeded=true; LIB.forEach(function(l){ DB.save("bibliotheque", l.id, l); }); } }
-  else LIB=docs.map(function(d){ d.id=d.id||d._id; delete d._id; return d; }).sort(function(a,b){ return (a.ordre||0)-(b.ordre||0) || (a.id<b.id?-1:1); });
+  else { LIB=docs.map(function(d){ d.id=d.id||d._id; delete d._id; return d; });
+    /* Actions ajoutées au référentiel après le premier lancement (ex. MC10) : elles complètent la bibliothèque enregistrée. */
+    var have={}; LIB.forEach(function(l){ have[l.id]=1; });
+    var manq=LIB_DEFAUT.filter(function(l){ return !have[l.id]; });
+    if(manq.length){ manq.forEach(function(l){ LIB.push(JSON.parse(JSON.stringify(l))); }); if(isOwner() && !LOADED.migr){ LOADED.migr=true; manq.forEach(function(l){ DB.save("bibliotheque", l.id, l); }); } }
+    LIB.sort(function(a,b){ return (a.ordre||0)-(b.ordre||0) || (Number(String(a.id).slice(1))||1e9)-(Number(String(b.id).slice(1))||1e9) || (a.id<b.id?-1:1); }); }
   refresh(); });
 DB.onStatus(status);
 DB.onUser(function(u, m){
   if(!u){ ME=null; render(); return; }
   var role = (m && m.role==="proprietaire") ? "proprietaire" : (m && m.actif ? m.role : "aucun");
   ME={email:u.email, nom:(m&&m.nom)||u.nom, role:role, m:m};
+  if(canCreate()) loadRes();
   render();
 });
 
@@ -740,6 +883,10 @@ document.addEventListener("click", function(ev){
   if(a==="go"){ if(t.getAttribute("data-v")==="diag") S.diag=null; S.edit=null; S.newTask=null; go(t.getAttribute("data-v")); }
   else if(a==="fiche"){ S.dup=null; go("fiche", t.getAttribute("data-id")); }
   else if(a==="modele"){ YKX.modeleVierge(); }
+  else if(a==="pdl"){ ouvrirPiece(byId(t.getAttribute("data-ent")), t.getAttribute("data-id")); }
+  else if(a==="pdel"){ retirerPiece(byId(t.getAttribute("data-ent")), t.getAttribute("data-id")); }
+  else if(a==="resdl"){ ouvrirRes(t.getAttribute("data-id")); }
+  else if(a==="rseg"){ S.rseg=t.getAttribute("data-s"); render(); }
   else if(a==="exportall"){ YKX.exportTout(ENT, TACHES, LIB, MEMBRES); }
   else if(a==="closeimp"){ S.imp=null; render(); }
   else if(a==="doimport"){ appliquerImport(); }
@@ -805,6 +952,8 @@ function showEditor(){ var ed=document.querySelector(".editor"); if(ed) ed.scrol
 document.addEventListener("keydown", function(ev){ if((ev.key==="Enter"||ev.key===" ") && ev.target.matches("tr[data-act],div[data-act]")){ ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", function(ev){
   var t=ev.target, d=S.diag;
+  if(t.hasAttribute("data-pup")){ joindre(t); return; }
+  if(t.hasAttribute("data-resup")){ televerserRes(t); return; }
   if(t.id==="fimport" && t.files && t.files[0]){ var f=t.files[0], rd=new FileReader();
     rd.onload=function(){ try{ var res=YKX.lire(new Uint8Array(rd.result)); if(res.erreur){ toast(res.erreur); return; } var R=preparerImport(res); R.fichier=f.name; S.imp=R; render(); }catch(err){ console.error(err); toast("Lecture du fichier impossible : "+err.message); } };
     rd.readAsArrayBuffer(f); t.value=""; return; }

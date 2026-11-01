@@ -38,8 +38,16 @@ Pour l'essayer, publiez le dossier sur GitHub Pages (étape 2), ou ouvrez-le ave
 ## Rapports d'activités
 Menu **Rapports** : mensuel, trimestriel, semestriel ou annuel. Faits marquants, indicateurs (entreprises inscrites, diagnostics, PDI validés, visites, actions réalisées et en retard, évolution du CA, tâches), situation du portefeuille, besoins de formation, activités par conseiller et journal daté. « Imprimer / PDF » ou « Exporter en Excel ».
 
+## Masterclasses, outils et pièces justificatives (version 1.1)
+- **Masterclasses et outils** (menu) : les dix masterclasses classées par segment, avec deux niveaux (« recommandée » et « selon le diagnostic »). Chaque masterclass propose le classeur Excel des participants, téléchargeable par tous.
+- Les **guides du formateur, les diaporamas et le Kit de mise en œuvre des PDI** sont réservés au propriétaire et aux conseillers. Le propriétaire les téléverse depuis cette page (bloc « Téléverser les supports du formateur ») : le nom de chaque fichier doit contenir MC1 à MC10 et « Guide » ou « Diaporama », ou « Kit ».
+- Dans chaque PDI, chaque action affiche la masterclass qui l'outille et le lien vers son classeur.
+- **Pièces justificatives** : photo, PDF, Word ou Excel (5 Mo au plus), à joindre pendant le diagnostic (par dimension), dans le PDI ou lors d'une visite (par action). Les photos sont allégées automatiquement. Elles sont rangées dans la fiche de l'entreprise. Stockage gratuit dans la base Firestore, découpé en morceaux ; le quota gratuit (1 Gio) suffit pour plusieurs milliers de pièces.
+- Trois actions « marchés publics » (MC10) s'ajoutent à la bibliothèque dans la dimension « Marketing et vente » : elles s'installent automatiquement à la première connexion du propriétaire.
+- **Important** : les règles `firestore.rules` ont changé. Recopiez-les dans Firebase › Firestore Database › Règles › Publier, sinon les pièces jointes et les supports seront refusés.
+
 ## Mettre à jour l'application
-Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.0.1`) pour que les appareils reprennent la nouvelle version.
+Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 
 ## Sauvegarde et données personnelles
 - **Équipe et partage › Export complet** chaque mois : archive Excel de toute la base.

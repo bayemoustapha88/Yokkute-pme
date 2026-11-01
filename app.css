@@ -202,3 +202,14 @@ body{font-size:16px}
   @page{size:A4;margin:14mm}
 }
 [hidden]{display:none!important}
+
+/* Pièces justificatives et liens vers les masterclasses */
+.pj{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px;margin-top:6px}
+.pjrow{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;padding:2px 0}
+.pjrow .linkbtn{font-weight:600;text-align:left;word-break:break-word}
+.pjadd{cursor:pointer;position:relative}
+.mclink{display:block;margin:4px 0;line-height:1.5}
+.mclink a{color:var(--accent);font-weight:600}
+.segtabs{gap:8px;margin:4px 0 8px}
+.card.mc h2{margin-top:2px}
+a.btn{color:inherit;text-decoration:none;display:inline-flex;align-items:center}

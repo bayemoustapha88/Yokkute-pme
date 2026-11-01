@@ -32,6 +32,22 @@ service cloud.firestore {
                        && request.resource.data.assigneA == resource.data.assigneA
                        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut','commentaire','dateFait']));
     }
+    // Pièces justificatives : morceaux de fichiers (base64), lus par l'équipe, ajoutés par le propriétaire et les conseillers.
+    match /fichiers/{id} {
+      allow read: if canRead();
+      allow create, update: if (isOwner() || isConseiller()) && request.resource.data.data is string && request.resource.data.data.size() <= 700000;
+      allow delete: if isOwner() || isConseiller();
+    }
+    // Supports du formateur (guides, diaporamas, kit) : réservés au propriétaire et aux conseillers.
+    match /ressources/{id} {
+      allow read: if isOwner() || isConseiller();
+      allow write: if isOwner();
+    }
+    match /ressources_parts/{id} {
+      allow read: if isOwner() || isConseiller();
+      allow create, update: if isOwner() && request.resource.data.data is string && request.resource.data.data.size() <= 700000;
+      allow delete: if isOwner();
+    }
     match /journal/{id} {
       allow read: if canRead();
       allow create: if (isOwner() || isConseiller()) && request.resource.data.auteur == email();

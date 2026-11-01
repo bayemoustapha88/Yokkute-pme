@@ -181,8 +181,42 @@ var LIB = [
  L(6,["B","C"],{n:3},"M6","Faire le bilan de conformité de l'entreprise et planifier les régularisations","Bilan de conformité rempli","Formation collective","CADE",6,"complementaire","modele","Bilan de conformité (modèle TAXAWU M6)"),
  L(7,["A","B"],{n:2},"CI","Ouvrir un numéro de paiement mobile réservé à l'entreprise","Numéro dédié actif","Coaching sur site","CADE",2,"rapide","outil","Numéro Wave ou Orange Money dédié"),
  L(7,["B"],{n:3},"M3","Créer un catalogue WhatsApp Business avec photos et prix","Catalogue en ligne","Formation collective","CADE",4,"rapide","outil","Guide de création du catalogue (TAXAWU M3)"),
- L(7,["C"],{n:4},"M1","Mettre en place un tableur de suivi des ventes et du stock","Tableur utilisé chaque semaine","Coaching sur site","CADE",6,"complementaire","outil","Tableur de suivi des ventes")
+ L(7,["C"],{n:4},"M1","Mettre en place un tableur de suivi des ventes et du stock","Tableur utilisé chaque semaine","Coaching sur site","CADE",6,"complementaire","outil","Tableur de suivi des ventes"),
+ /* Masterclass MC10 · accès aux marchés publics (ajoutées en novembre 2026) */
+ L(1,["B","C"],{n:4},"M3","Constituer et tenir à jour son dossier administratif pour les marchés publics (NINEA, RCCM, quitus fiscal, attestations IPRES, CSS et Inspection du travail, non-faillite)","Toutes les pièces présentes et valides à la date de la visite","Formation collective (MC10) + coaching","CADE, ARCOP",3,"essentiel","outil","Tableau du dossier administratif avec dates d'expiration (MC10, onglet Dossier_administratif)"),
+ L(1,["C"],{n:4},"M3","Se faire connaître de trois acheteurs publics proches et consulter leurs plans de passation des marchés","Trois dépôts datés de la présentation, plans de passation consultés","Formation collective (MC10) + coaching","CADE, ARCOP",2,"rapide","relation","Veille des marchés publics (MC10, onglet Veille_marches)"),
+ L(1,["C"],{n:4},"M3","Déposer une première offre à un marché public, seul ou en groupement, avec prix et trésorerie calculés","Récépissé de dépôt d'une offre conforme","Coaching dossier (relecture de l'offre)","CADE, ARCOP",6,"essentiel","modele","Prix d'offre, trésorerie du marché et rétroplanning (MC10)")
 ];
+/* Masterclasses du parcours : titre, classeur des participants, segments (rec = recommandée, bes = selon le diagnostic) */
+var MC = {
+ MC1:{t:"Tenir sa caisse et connaître son vrai prix", rec:["A","B"], bes:[]},
+ MC2:{t:"Piloter sa trésorerie et préparer son crédit", rec:["B","C"], bes:["A"]},
+ MC3:{t:"Vendre plus et se faire payer", rec:["A","B"], bes:["C"]},
+ MC4:{t:"Fixer son cap : objectifs et plan d'action", rec:["B","C"], bes:[]},
+ MC5:{t:"Déléguer et organiser son équipe", rec:["B","C"], bes:["A"]},
+ MC6:{t:"Se formaliser : pourquoi et comment", rec:["A"], bes:["B"]},
+ MC7:{t:"Tenir ses comptes et payer le juste impôt", rec:["B","C"], bes:[]},
+ MC8:{t:"Employeur en règle", rec:["C"], bes:["A","B"]},
+ MC9:{t:"Le numérique au service de mon entreprise", rec:["A","B"], bes:["C"]},
+ MC10:{t:"Accéder aux marchés publics", rec:["C"], bes:[]}
+};
+var MC_POURQUOI = {
+ A:{MC2:"Épargne et compte IMF ; mois creux et pics de saisonnalité", MC5:"Si l'entreprise dépend trop de son promoteur", MC8:"Si l'activité exige une autorisation (FRA, licence, agrément)"},
+ B:{MC6:"Si le RCCM manque ou si la forme juridique doit changer", MC8:"Si l'entreprise emploie du personnel"},
+ C:{MC3:"Créances clients, référencement chez des distributeurs", MC9:"Tableur de suivi des ventes et du stock"}
+};
+function mcFichier(code){ return code+"_Outils_participants.xlsx"; }
+/* Masterclass qui outille une action du PDI : d'abord la dimension Numérique et les actions de marchés publics, puis le module. */
+function mcOf(p){
+  if(!p) return null;
+  if(p.mc) return p.mc;
+  if(p.dim===7) return "MC9";
+  if(/march[ée]s? publics?|acheteurs? publics?|dossier administratif/i.test(p.action||"")) return "MC10";
+  var m={M1:"MC1",M2:"MC4",M3:"MC3",M4:"MC2",M5:"MC5",M6:"MC7",U0:"MC6",U1:"MC6",U2:"MC7",U3:"MC7",U4:"MC8",U5:"MC8",U6:"MC8"}[p.module];
+  if(m) return m;
+  if(p.module==="CI" && p.dim===3) return "MC1";
+  return null;
+}
 var NATURES = {formation:"Formation", outil:"Outil à mettre en place", modele:"Modèle à remplir", coaching:"Coaching", relation:"Mise en relation", demarche:"Démarche administrative"};
 var TYPES = {essentiel:"Essentiel", rapide:"Effet rapide", complementaire:"Complémentaire"};
 
