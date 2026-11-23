@@ -26,6 +26,7 @@ window.segOf = function(e){ return e.notes ? (e.override || segment(e.notes, e.p
 function lastVisit(e){ var v=e.visites||[]; return v.length ? v[v.length-1].date : null; }
 
 /* ================= Droits ================= */
+var ROLES={proprietaire:"Propriétaire", conseiller:"Conseiller", accueil:"Accueil / caisse", lecteur:"Lecteur"};
 function isOwner(){ return ME && ME.role==="proprietaire"; }
 function isCons(){ return ME && ME.role==="conseiller"; }
 function canCreate(){ return isOwner() || isCons(); }
@@ -56,10 +57,11 @@ var IC = {
  rapports:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>',
  biblio:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6a2 2 0 0 1 2 2v14a2 2 0 0 0-2-2H4zM20 4h-6a2 2 0 0 0-2 2v14a2 2 0 0 1 2-2h6z"/></svg>',
  ressources:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v12M7 10l5 5 5-5"/><path d="M4 17v3h16v-3"/></svg>',
+ cade:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 6-6"/><path d="M16 8h4v4"/></svg>',
  equipe:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><circle cx="17.5" cy="9" r="2.5"/><path d="M17 14c3 0 5 2 5 5"/></svg>'
 };
 function navItems(){
-  var n=[["tableau","Tableau de bord","Accueil"],["entreprises","Entreprises","Entreprises"]];
+  var n=[["tableau","Tableau de bord","Accueil"],["cade","Activités CADE","CADE"],["entreprises","Entreprises","Entreprises"]];
   if(canCreate()) n.push(["diag","Diagnostic","Diagnostic"],["taches","Tâches","Tâches"]);
   n.push(["rapports","Rapports d'activités","Rapports"],["biblio","Bibliothèque d'actions","Actions"],["ressources","Masterclasses et outils","Outils"],["equipe", isOwner()?"Équipe et partage":"Équipe et exports","Équipe"]);
   return n;
@@ -688,7 +690,7 @@ function periode(r){
   else { a=y+"-01-01"; b=y+"-12-31"; lab="Année "+y+" (rapport annuel)"; f=String(y); }
   return {debut:a, fin:b, label:lab, fichier:f};
 }
-var JTYPES={entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution", piece_jointe:"Pièce justificative"};
+var JTYPES={entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution", piece_jointe:"Pièce justificative", realisation:"Activité CADE", adhesion:"Carte d'adhésion"};
 function calcRapport(){
   var P=periode(S.rap), inP=function(d){ return d && String(d).slice(0,10)>=P.debut && String(d).slice(0,10)<=P.fin; };
   var R={P:P, nouv:0, diags:[], pdiVal:0, actFaites:0, actRetard:0, actEnCours:0, visites:0, feux:{Vert:0,Orange:0,Rouge:0}, caVar:[], tCrees:0, tFaites:0, tRetard:0, besoins:{}, cons:{}, seg:{A:0,B:0,C:0}, volets:VOLETS.map(function(){return {o:0,app:0};}), formalisees:0};
@@ -797,22 +799,22 @@ function libEditor(){
 /* ================= Équipe et partage ================= */
 function vEquipe(){
   var h='<div><p class="eyebrow">'+(isOwner()?"Droits d'accès":"Votre accès")+'</p><h1>'+(isOwner()?"Équipe et partage":"Équipe et exports")+'</h1></div>';
-  h+='<section class="card"><h2>Membres</h2><p class="muted">Chaque membre se connecte avec son compte Google. Un <b>conseiller</b> peut réaliser les diagnostics, suivre les PDI et faire les visites des entreprises qui lui sont attribuées, et recevoir des tâches. Un <b>lecteur</b> consulte tout sans rien modifier (hiérarchie, partenaires internes).</p>';
+  h+='<section class="card"><h2>Membres</h2><p class="muted">Chaque membre se connecte avec son compte Google. Un <b>conseiller</b> peut réaliser les diagnostics, suivre les PDI et faire les visites des entreprises qui lui sont attribuées, et recevoir des tâches. Un agent d\'<b>accueil / caisse</b> enregistre les visiteurs et les ventes de cartes d\'adhésion dans « Activités CADE ». Un <b>lecteur</b> consulte tout sans rien modifier (hiérarchie, partenaires internes).</p>';
   h+='<div class="tablewrap"><table><thead><tr><th>Membre</th><th>Rôle</th><th class="hide-sm">Entreprises</th><th>Accès</th>'+(isOwner()?'<th></th>':'')+'</tr></thead><tbody>';
   h+='<tr><td><b>'+esc(OWNER)+'</b></td><td>Propriétaire</td><td class="hide-sm num">'+ENT.filter(function(e){return e.conseiller===OWNER;}).length+'</td><td><span class="ok">Actif</span></td>'+(isOwner()?'<td></td>':'')+'</tr>';
   MEMBRES.slice().sort(function(a,b){return a.email<b.email?-1:1;}).forEach(function(m){
-    h+='<tr><td><b>'+esc(m.nom||m.email)+'</b><div class="small muted">'+esc(m.email)+'</div></td><td>'+(isOwner()?'<select data-mrole="'+esc(m.email)+'" style="width:auto"><option value="conseiller"'+(m.role==="conseiller"?" selected":"")+'>Conseiller</option><option value="lecteur"'+(m.role==="lecteur"?" selected":"")+'>Lecteur</option></select>':(m.role==="conseiller"?"Conseiller":"Lecteur"))+'</td>'+
+    h+='<tr><td><b>'+esc(m.nom||m.email)+'</b><div class="small muted">'+esc(m.email)+'</div></td><td>'+(isOwner()?'<select data-mrole="'+esc(m.email)+'" style="width:auto">'+["conseiller","accueil","lecteur"].map(function(r){ return '<option value="'+r+'"'+(m.role===r?" selected":"")+'>'+ROLES[r]+'</option>'; }).join("")+'</select>':(ROLES[m.role]||m.role))+'</td>'+
       '<td class="hide-sm num">'+ENT.filter(function(e){return e.conseiller===m.email;}).length+'</td><td>'+(m.actif?'<span class="ok">Actif</span>':'<span class="ko">Suspendu</span>')+'</td>'+
       (isOwner()?'<td><div class="row"><button class="btn sm ghost" data-act="mtog" data-id="'+esc(m.email)+'">'+(m.actif?"Suspendre":"Réactiver")+'</button><button class="btn sm ghost danger" data-act="mdel" data-id="'+esc(m.email)+'">Retirer</button></div></td>':'')+'</tr>'; });
   h+='</tbody></table></div>';
-  if(isOwner()) h+='<div class="grid g4" style="align-items:end"><label class="f">Nom<input type="text" id="m_nom" placeholder="Prénom et nom"></label><label class="f">Adresse Gmail<input type="email" id="m_mail" placeholder="nom@gmail.com"></label><label class="f">Rôle<select id="m_role"><option value="conseiller">Conseiller</option><option value="lecteur">Lecteur</option></select></label><div><button class="btn primary" data-act="madd">Ajouter le membre</button></div></div>'+
+  if(isOwner()) h+='<div class="grid g4" style="align-items:end"><label class="f">Nom<input type="text" id="m_nom" placeholder="Prénom et nom"></label><label class="f">Adresse Gmail<input type="email" id="m_mail" placeholder="nom@gmail.com"></label><label class="f">Rôle<select id="m_role"><option value="conseiller">Conseiller</option><option value="accueil">Accueil / caisse</option><option value="lecteur">Lecteur</option></select></label><div><button class="btn primary" data-act="madd">Ajouter le membre</button></div></div>'+
     '<p class="small muted">Retirer un membre ne supprime pas son travail : ses entreprises restent dans la base et peuvent être réattribuées.</p>';
   h+='</section>';
   h+='<section class="card"><h2>Exports</h2><div class="grid g3">'+
     '<div class="card" style="background:var(--surface-2)"><b>Export complet (Excel)</b><p class="small muted">Entreprises, diagnostics, PDI, visites, tâches, bibliothèque et équipe, une feuille par type. À faire chaque mois pour l\'archive du CADE.</p><button class="btn sm" data-act="exportall">Télécharger</button></div>'+
     '<div class="card" style="background:var(--surface-2)"><b>Modèle Excel</b><p class="small muted">Les 11 colonnes de l\'export CCIAK suivies des colonnes du CADE, pour enregistrer des entreprises en série.</p><button class="btn sm" data-act="modele">Télécharger</button></div>'+
     '<div class="card" style="background:var(--surface-2)"><b>Rapport d\'activités</b><p class="small muted">Mensuel, trimestriel, semestriel ou annuel, à imprimer en PDF ou exporter en Excel.</p><button class="btn sm" data-act="go" data-v="rapports">Ouvrir les rapports</button></div></div></section>';
-  h+='<section class="card"><h2>Mon compte</h2><p class="small">Connecté avec <b>'+esc(ME.email)+'</b> · rôle : '+({proprietaire:"propriétaire",conseiller:"conseiller",lecteur:"lecteur"}[ME.role])+(DB.mode==="local"?" · <b>mode local</b> (les données restent sur cet appareil ; renseignez js/config.js pour activer la base en ligne)":"")+'.</p><div class="row"><button class="btn" data-act="signout">Se déconnecter</button></div></section>';
+  h+='<section class="card"><h2>Mon compte</h2><p class="small">Connecté avec <b>'+esc(ME.email)+'</b> · rôle : '+String(ROLES[ME.role]||ME.role).toLowerCase()+(DB.mode==="local"?" · <b>mode local</b> (les données restent sur cet appareil ; renseignez js/config.js pour activer la base en ligne)":"")+'.</p><div class="row"><button class="btn" data-act="signout">Se déconnecter</button></div></section>';
   return h;
 }
 
@@ -827,6 +829,7 @@ function render(){
   try{
     if(v==="tableau") html=vTableau(); else if(v==="entreprises") html=vEntreprises(); else if(v==="newent") html=vEntForm(); else if(v==="fiche") html=vFiche();
     else if(v==="diag") html=S.diag?vDiag():vDiagPick(); else if(v==="pdi") html=vPDI(); else if(v==="visite") html=vVisite(); else if(v==="taches") html=vTaches();
+    else if(v==="cade") html=window.YK_CADE.view();
     else if(v==="rapports") html=vRapports(); else if(v==="biblio") html=vBiblio(); else if(v==="ressources") html=vRessources(); else html=vEquipe();
   }catch(err){ console.error(err); html='<section class="card"><h2>Erreur d\'affichage</h2><p class="small">'+esc(err.message)+'</p><button class="btn" data-act="go" data-v="tableau">Retour au tableau de bord</button></section>'; }
   if(ME.role==="lecteur") html='<p class="ro-banner">Accès en lecture seule : vous consultez le portefeuille sans pouvoir le modifier.</p>'+html;
@@ -835,7 +838,7 @@ function render(){
   var items=navItems().map(function(n){ return '<button data-act="go" data-v="'+n[0]+'"'+(top===n[0]?' aria-current="page"':'')+'>'+IC[n[0]]+'<span>'+n[1]+'</span>'+(n[0]==="taches"&&nb?'<span class="badge">'+nb+'</span>':'')+'</button>'; }).join("");
   document.getElementById("nav").innerHTML=items;
   document.getElementById("tabbar").innerHTML=navItems().map(function(n){ return '<button data-act="go" data-v="'+n[0]+'"'+(top===n[0]?' aria-current="page"':'')+'>'+IC[n[0]]+'<span>'+n[2]+(n[0]==="taches"&&nb?" ("+nb+")":"")+'</span></button>'; }).join("");
-  document.getElementById("userbox").innerHTML='<b>'+esc(ME.nom||ME.email)+'</b><span class="role">'+({proprietaire:"Propriétaire",conseiller:"Conseiller",lecteur:"Lecteur"}[ME.role])+'</span>';
+  document.getElementById("userbox").innerHTML='<b>'+esc(ME.nom||ME.email)+'</b><span class="role">'+(ROLES[ME.role]||ME.role)+'</span>';
   if(v==="entreprises"){ var a=document.getElementById("fseg"); if(a) a.value=S.f.seg; a=document.getElementById("ffeu"); if(a) a.value=S.f.feu; a=document.getElementById("fcons"); if(a) a.value=S.f.cons; }
   status(); S.stale=false;
 }
@@ -851,7 +854,7 @@ function status(){
 function go(v,id){ S.addFor=null; S.confirmDel=null; S.view=v; if(id) S.id=id; render(); window.scrollTo(0,0); }
 
 /* ================= Données : écoute ================= */
-function refresh(){ if(EDIT_VIEWS.indexOf(S.view)>=0 || (S.view==="biblio"&&S.edit) || (S.view==="taches"&&S.newTask) || (S.view==="entreprises"&&S.imp) || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))){ S.stale=true; status(); return; } render(); }
+function refresh(){ if(EDIT_VIEWS.indexOf(S.view)>=0 || (S.view==="cade" && window.YK_CADE.editing()) || (S.view==="biblio"&&S.edit) || (S.view==="taches"&&S.newTask) || (S.view==="entreprises"&&S.imp) || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))){ S.stale=true; status(); return; } render(); }
 DB.listen("entreprises", function(docs){ ENT=docs.map(function(d){ d.id=d.id||d._id; return d; }); LOADED.entreprises=true; refresh(); });
 DB.listen("membres", function(docs){ MEMBRES=docs.map(function(d){ d.email=d.email||d._id; return d; }); LOADED.membres=true; if(ME && ME.role!=="proprietaire"){ var m=MEMBRES.filter(function(x){return x.email===ME.email;})[0]; if(m){ ME.role=m.actif?m.role:"aucun"; ME.nom=m.nom||ME.nom; } } refresh(); });
 DB.listen("taches", function(docs){ TACHES=docs.map(function(d){ d.id=d.id||d._id; return d; }); refresh(); });
@@ -878,6 +881,7 @@ DB.onUser(function(u, m){
 document.addEventListener("click", function(ev){
   var t=ev.target.closest("[data-act]"); if(!t) return;
   var a=t.getAttribute("data-act"); if(t.tagName==="A") ev.preventDefault();
+  if(a.indexOf("c_")===0){ window.YK_CADE.click(t, a); return; }
   if(a==="signin"){ DB.signIn().catch(function(e){ toast("Connexion impossible : "+(e&&e.message||e)); }); return; }
   if(a==="signout"){ DB.signOut(); return; }
   if(a==="go"){ if(t.getAttribute("data-v")==="diag") S.diag=null; S.edit=null; S.newTask=null; go(t.getAttribute("data-v")); }
@@ -952,6 +956,7 @@ function showEditor(){ var ed=document.querySelector(".editor"); if(ed) ed.scrol
 document.addEventListener("keydown", function(ev){ if((ev.key==="Enter"||ev.key===" ") && ev.target.matches("tr[data-act],div[data-act]")){ ev.preventDefault(); ev.target.click(); } });
 document.addEventListener("change", function(ev){
   var t=ev.target, d=S.diag;
+  if(S.view==="cade" && window.YK_CADE.change(t)) return;
   if(t.hasAttribute("data-pup")){ joindre(t); return; }
   if(t.hasAttribute("data-resup")){ televerserRes(t); return; }
   if(t.id==="fimport" && t.files && t.files[0]){ var f=t.files[0], rd=new FileReader();
@@ -1008,6 +1013,7 @@ document.addEventListener("change", function(ev){
 });
 document.addEventListener("input", function(ev){
   var t=ev.target;
+  if(S.view==="cade" && window.YK_CADE.input(t)) return;
   if(t.id==="fq"){ S.f.q=t.value; var pos=t.selectionStart; render(); var n=document.getElementById("fq"); if(n){ n.focus(); try{n.setSelectionRange(pos,pos);}catch(e){} } return; }
   if(S.diag && t.hasAttribute("data-obs")){ S.diag.obs[S.diag.step]=t.value; saveDraft(); return; }
   if(S.diag && t.hasAttribute("data-qt")){ var tk=t.getAttribute("data-qt"); S.diag.rep[tk]=S.diag.rep[tk]||{}; S.diag.rep[tk].v=t.value; saveDraft(); return; }
@@ -1024,6 +1030,9 @@ document.addEventListener("input", function(ev){
 document.getElementById("sync").addEventListener("click", function(){ if(S.stale) render(); });
 window.addEventListener("beforeprint", function(){ if(!document.body.classList.contains("printing")){ /* impression directe : rien de spécial */ } });
 
+/* Passerelle vers le module « Activités CADE » (cade.js). */
+window.YK_APP = { get ME(){ return ME; }, get ENT(){ return ENT; }, get MEMBRES(){ return MEMBRES; },
+  render:render, refresh:refresh, go:go, journal:journal, court:court, byId:byId, toast:toast };
 if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn(e); });
 render();
 })();

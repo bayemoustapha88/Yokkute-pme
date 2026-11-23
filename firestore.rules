@@ -8,7 +8,13 @@ service cloud.firestore {
     function member() { return get(/databases/$(database)/documents/membres/$(email())).data; }
     function isMember() { return signedIn() && exists(/databases/$(database)/documents/membres/$(email())) && member().actif == true; }
     function isConseiller() { return isMember() && member().role == 'conseiller'; }
+    function isAccueil() { return isMember() && member().role == 'accueil'; }
+    function isStaff() { return isOwner() || isConseiller() || isAccueil(); }
     function canRead() { return isOwner() || isMember(); }
+    // Saisie modifiable par son auteur pendant 7 jours (604 800 000 ms), date de création non modifiable.
+    function auteurRecent() { return resource.data.auteur == email() && request.resource.data.auteur == email()
+                              && request.resource.data.creeMs == resource.data.creeMs
+                              && request.time.toMillis() - resource.data.creeMs < 604800000; }
 
     match /entreprises/{id} {
       allow read: if canRead();
@@ -50,7 +56,29 @@ service cloud.firestore {
     }
     match /journal/{id} {
       allow read: if canRead();
-      allow create: if (isOwner() || isConseiller()) && request.resource.data.auteur == email();
+      allow create: if isStaff() && request.resource.data.auteur == email();
+    }
+    // ---- Activités CADE (version 1.2) ----
+    // Journal des activités : l'accueil ne saisit que l'axe A1.
+    match /realisations/{id} {
+      allow read: if canRead();
+      allow create: if request.resource.data.auteur == email() && request.resource.data.creeMs is number
+                    && (isOwner() || isConseiller() || (isAccueil() && request.resource.data.axe == 'A1'));
+      allow update: if isOwner() || (isStaff() && auteurRecent() && (!isAccueil() || request.resource.data.axe == 'A1'));
+      allow delete: if isOwner() || (isStaff() && resource.data.auteur == email() && request.time.toMillis() - resource.data.creeMs < 604800000);
+    }
+    // Cartes d'adhésion : jamais supprimées ; seul le propriétaire les annule (statut « Annulée »).
+    match /adhesions/{id} {
+      allow read: if canRead();
+      allow create: if isStaff() && request.resource.data.auteur == email() && request.resource.data.creeMs is number
+                    && request.resource.data.statut == 'Valide';
+      allow update: if isOwner() || (isStaff() && auteurRecent() && request.resource.data.statut == resource.data.statut);
+      allow delete: if false;
+    }
+    // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire.
+    match /cade_param/{id} {
+      allow read: if canRead();
+      allow write: if isOwner();
     }
   }
 }

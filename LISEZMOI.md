@@ -46,6 +46,17 @@ Menu **Rapports** : mensuel, trimestriel, semestriel ou annuel. Faits marquants,
 - Trois actions « marchés publics » (MC10) s'ajoutent à la bibliothèque dans la dimension « Marketing et vente » : elles s'installent automatiquement à la première connexion du propriétaire.
 - **Important** : les règles `firestore.rules` ont changé. Recopiez-les dans Firebase › Firestore Database › Règles › Publier, sinon les pièces jointes et les supports seront refusés.
 
+## Activités CADE : planification et suivi (version 1.2, phase 1)
+Nouveau menu **Activités CADE**, organisé selon les 9 activités de la fiche de poste (axes A1 à A9). Quatre onglets :
+- **Tableau de bord** : objectifs financiers (cartes d'adhésion, prestations, financements obtenus) avec jauge, cible de la période et projection ; prévu et réalisé pour chaque indicateur des 9 axes ; cartes à renouveler ; activités par membre ; dernières activités. Période au choix : mois, trimestre, semestre ou année.
+- **Journal des activités** : chaque action menée est saisie en moins d'une minute (date, axe, type d'action, entreprise, participants, montant encaissé, financement demandé et obtenu, observation). Les diagnostics, les PDI validés et les visites de suivi déjà enregistrés dans Yokkute sont comptés automatiquement : ne pas les ressaisir. Export Excel.
+- **Cartes d'adhésion** : vente ou renouvellement (catégorie, tarif, reçu, date de validité), liste des cartes à relancer, taux de renouvellement. Une vente ne se supprime pas : le propriétaire l'annule avec un motif. Export Excel.
+- **Plan annuel et référentiel** : le propriétaire fixe les cibles annuelles de chaque indicateur, les tarifs et cibles des cartes, et les objectifs de recettes ; il peut ajouter des types d'actions propres au CADE. Tant que le plan n'est pas enregistré, des **valeurs d'exemple** s'affichent.
+
+Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visiteurs (axe A1) et les ventes de cartes, sans accès aux diagnostics. Une saisie reste modifiable par son auteur pendant 7 jours ; ensuite seul le propriétaire peut la corriger.
+
+**Important** : les règles `firestore.rules` ont changé (collections `realisations`, `adhesions`, `cade_param`). Recopiez-les dans Firebase › Firestore Database › Règles › Publier, sinon le module affiche « Accès refusé par la base ».
+
 ## Mettre à jour l'application
 Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 
