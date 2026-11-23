@@ -185,7 +185,13 @@ var LIB = [
  /* Masterclass MC10 · accès aux marchés publics (ajoutées en novembre 2026) */
  L(1,["B","C"],{n:4},"M3","Constituer et tenir à jour son dossier administratif pour les marchés publics (NINEA, RCCM, quitus fiscal, attestations IPRES, CSS et Inspection du travail, non-faillite)","Toutes les pièces présentes et valides à la date de la visite","Formation collective (MC10) + coaching","CADE, ARCOP",3,"essentiel","outil","Tableau du dossier administratif avec dates d'expiration (MC10, onglet Dossier_administratif)"),
  L(1,["C"],{n:4},"M3","Se faire connaître de trois acheteurs publics proches et consulter leurs plans de passation des marchés","Trois dépôts datés de la présentation, plans de passation consultés","Formation collective (MC10) + coaching","CADE, ARCOP",2,"rapide","relation","Veille des marchés publics (MC10, onglet Veille_marches)"),
- L(1,["C"],{n:4},"M3","Déposer une première offre à un marché public, seul ou en groupement, avec prix et trésorerie calculés","Récépissé de dépôt d'une offre conforme","Coaching dossier (relecture de l'offre)","CADE, ARCOP",6,"essentiel","modele","Prix d'offre, trésorerie du marché et rétroplanning (MC10)")
+ L(1,["C"],{n:4},"M3","Déposer une première offre à un marché public, seul ou en groupement, avec prix et trésorerie calculés","Récépissé de dépôt d'une offre conforme","Coaching dossier (relecture de l'offre)","CADE, ARCOP",6,"essentiel","modele","Prix d'offre, trésorerie du marché et rétroplanning (MC10)"),
+ /* Masterclass MC11 · dynamique organisationnelle et gestion participative (GIE, coopératives, associations ; ajoutées en novembre 2026) */
+ Object.assign(L(5,["A","B"],{n:2,collectif:true},"M5","Tenir une assemblée générale avec PV signé et liste de présence, et relire le règlement intérieur en langue locale","PV signé et liste de présence","Formation collective (MC11) + coaching","CADE",2,"essentiel","demarche","Calendrier des réunions, modèle de PV et liste de présence (MC11, onglet Reunions_PV)"),{mc:"MC11"}),
+ Object.assign(L(5,["A","B"],{n:2,collectif:true},"M5","Répartir par écrit les rôles du bureau et des commissions, et pourvoir les postes vacants","Tableau des organes et des rôles validé en AG","Formation collective (MC11) + coaching","CADE",3,"essentiel","modele","Organes et rôles, « qui décide quoi » (MC11, onglet Organes_roles)"),{mc:"MC11"}),
+ Object.assign(L(5,["A","B"],{n:3,collectif:true},"M5","Présenter la caisse à chaque réunion mensuelle et instaurer la double signature des dépenses","Registre de caisse présenté trois mois de suite ; règle adoptée en AG","Coaching sur site","CADE",3,"rapide","outil","Cotisations et registre de caisse (MC11, onglet Cotisations_caisse)"),{mc:"MC11"}),
+ Object.assign(L(5,["B","C"],{n:3,collectif:true},"M5","Réaliser l'autodiagnostic participatif du groupement et adopter en AG un plan d'action à 12 mois","Autodiagnostic rempli ; plan d'action voté en AG","Formation collective (MC11) + coaching","CADE",4,"essentiel","modele","Autodiagnostic et plan d'action (MC11, onglets Autodiagnostic et Plan_action)"),{mc:"MC11"}),
+ Object.assign(L(5,["B","C"],{n:4,collectif:true},"M5","Mettre à jour les statuts et le règlement intérieur (adhésion, sanctions, médiation, seuils de dépense)","Statuts et règlement intérieur révisés, adoptés en AG","Coaching conseil","CADE",6,"complementaire","demarche","Modèle de statuts de SCOOPS (OHADA) et règlement intérieur du groupement"),{mc:"MC11"})
 ];
 /* Masterclasses du parcours : titre, classeur des participants, segments (rec = recommandée, bes = selon le diagnostic) */
 var MC = {
@@ -198,12 +204,13 @@ var MC = {
  MC7:{t:"Tenir ses comptes et payer le juste impôt", rec:["B","C"], bes:[]},
  MC8:{t:"Employeur en règle", rec:["C"], bes:["A","B"]},
  MC9:{t:"Le numérique au service de mon entreprise", rec:["A","B"], bes:["C"]},
- MC10:{t:"Accéder aux marchés publics", rec:["C"], bes:[]}
+ MC10:{t:"Accéder aux marchés publics", rec:["C"], bes:[]},
+ MC11:{t:"Dynamique organisationnelle et gestion participative", rec:["A","B"], bes:["C"], collectif:true}
 };
 var MC_POURQUOI = {
- A:{MC2:"Épargne et compte IMF ; mois creux et pics de saisonnalité", MC5:"Si l'entreprise dépend trop de son promoteur", MC8:"Si l'activité exige une autorisation (FRA, licence, agrément)"},
- B:{MC6:"Si le RCCM manque ou si la forme juridique doit changer", MC8:"Si l'entreprise emploie du personnel"},
- C:{MC3:"Créances clients, référencement chez des distributeurs", MC9:"Tableur de suivi des ventes et du stock"}
+ A:{MC11:"Pour les GIE, coopératives et associations : assemblée, rôles, caisse transparente", MC2:"Épargne et compte IMF ; mois creux et pics de saisonnalité", MC5:"Si l'entreprise dépend trop de son promoteur", MC8:"Si l'activité exige une autorisation (FRA, licence, agrément)"},
+ B:{MC11:"Pour les GIE, coopératives et associations : autodiagnostic et plan d'action voté en AG", MC6:"Si le RCCM manque ou si la forme juridique doit changer", MC8:"Si l'entreprise emploie du personnel"},
+ C:{MC11:"Groupement qui prépare une extension ou un gros financement : statuts et règlement à jour", MC3:"Créances clients, référencement chez des distributeurs", MC9:"Tableur de suivi des ventes et du stock"}
 };
 function mcFichier(code){ return code+"_Outils_participants.xlsx"; }
 /* Masterclass qui outille une action du PDI : d'abord la dimension Numérique et les actions de marchés publics, puis le module. */
@@ -251,8 +258,11 @@ function propFromVolets(v){
   var app=0, pts=0; v.forEach(function(s){ if(s==="Non applicable") return; app++; if(s==="Obtenu") pts+=1; else if(s==="En cours") pts+=0.5; });
   if(!app) return 5; return Math.max(1, Math.min(5, 1+Math.round(pts/app*4)));
 }
+/* Formes collectives : GIE, coopératives, associations (masterclass MC11). */
+function estCollectif(forme){ return /GIE|COOP|ASSOCIATION|GROUPEMENT|UNION|FEDERATION|FÉDÉRATION/i.test(String(forme||"")); }
 function trigOK(l, x){
   var t=l.t, ok=false;
+  if(t.collectif && !estCollectif(x.forme)) return false;
   if(t.n!=null && x.notes[l.dim] && x.notes[l.dim]<=t.n) ok=true;
   if(t.v!=null && x.volets && x.volets[t.v]!=="Obtenu" && x.volets[t.v]!=="Non applicable") ok=true;
   if(t.frein && x.freins && x.freins.some(Boolean)) ok=true;
@@ -265,7 +275,7 @@ function trigText(l){
   if(t.v!=null) p.push("volet FVE « "+VOLETS[t.v].nom+" » non obtenu");
   if(t.frein) p.push("frein à la formalisation exprimé");
   if(t.att) p.push("point d'attention : "+ATT[t.att].toLowerCase());
-  return p.join(" ou ");
+  return p.join(" ou ")+(t.collectif?" (GIE, coopérative ou association uniquement)":"");
 }
 function isBloqLib(l, x){
   if(l.dim===IDX_GESTION && l.t.n!=null && x.notes[IDX_GESTION]<=2 && l.module==="M1" && l.type==="essentiel") return true;
@@ -280,6 +290,8 @@ function genPDI(x, seg){
     var ba=isBloqLib(a,x)?0:1, bb=isBloqLib(b,x)?0:1; if(ba!==bb) return ba-bb;
     var fa=(seg!=="C" && a.dim===IDX_FORMAL && (a.t.v===0||a.t.v===2))?0:1, fb=(seg!=="C" && b.dim===IDX_FORMAL && (b.t.v===0||b.t.v===2))?0:1; if(fa!==fb) return fa-fb;
     var na=x.notes[a.dim]||5, nb=x.notes[b.dim]||5; if(na!==nb) return na-nb;
+    /* Pour un GIE, une coopérative ou une association, les actions de gouvernance collective (MC11) passent avant les actions individuelles. */
+    var ca=a.t.collectif?0:1, cb=b.t.collectif?0:1; if(ca!==cb) return ca-cb;
     return rank[a.type]-rank[b.type];
   });
   var out=[], perDim={};
@@ -294,7 +306,7 @@ function genPDI(x, seg){
 function addDur(d,n,u){ var x=new Date((d||TODAY)+"T00:00:00Z"); n=Number(n)||0; if(u==="jours") x.setUTCDate(x.getUTCDate()+n); else if(u==="semaines") x.setUTCDate(x.getUTCDate()+7*n); else x.setUTCMonth(x.getUTCMonth()+n); return x.toISOString().slice(0,10); }
 function enMois(n,u){ n=Number(n)||0; return u==="jours"? n/30 : u==="semaines"? n/4.3 : n; }
 var UNITES=["jours","semaines","mois"];
-function libToItem(l, start){ start=start||TODAY; var u=l.unite||"mois"; return {lib:l.id, dim:l.dim, module:l.module, reco:recoText(l.module), action:l.action, livrable:l.livrable, modalite:l.modalite, partenaire:l.partenaire, debut:start, duree:l.mois, unite:u, echeance:addDur(start,l.mois,u), type:l.type, nature:l.nature, outil:l.outil, statut:"À faire"}; }
+function libToItem(l, start){ start=start||TODAY; var u=l.unite||"mois"; return {lib:l.id, dim:l.dim, module:l.module, reco:recoText(l.module), action:l.action, livrable:l.livrable, modalite:l.modalite, partenaire:l.partenaire, debut:start, duree:l.mois, unite:u, echeance:addDur(start,l.mois,u), type:l.type, nature:l.nature, outil:l.outil, mc:l.mc||null, statut:"À faire"}; }
 var TRANCHES = ["Moins de 5 M FCFA","5 à 25 M FCFA","25 à 100 M FCFA","Plus de 100 M FCFA"];
 function money(x){ return (x==null||x==="")?"—":Number(x).toLocaleString("fr-FR").replace(/ | /g," ")+" FCFA"; }
 function benef(f){ return (f && f.caMois!=null && f.charges!=null && f.caMois!=="" && f.charges!=="") ? Number(f.caMois)-Number(f.charges) : null; }

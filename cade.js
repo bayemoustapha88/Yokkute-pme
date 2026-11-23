@@ -25,7 +25,7 @@ var AXES = [
  {code:"A3", lib:"Conseil en gestion, organisation et financement", ent:"oui",
   types:[{t:"Séance de conseil en gestion ou organisation"},{t:"Conseil en financement"},{t:"Business plan",m:1},{t:"Dossier de crédit",m:1},{t:"Appui à la formalisation",m:1},{t:"Conseil approfondi (forfait)",m:1}]},
  {code:"A4", lib:"Formations ciblées", ent:"option",
-  types:[{t:"Session de formation",p:1,m:1},{t:"Masterclass (MC1 à MC10)",p:1,m:1},{t:"Atelier ou sensibilisation",p:1}]},
+  types:[{t:"Session de formation",p:1,m:1},{t:"Masterclass (MC1 à MC11)",p:1,m:1},{t:"Atelier ou sensibilisation",p:1}]},
  {code:"A5", lib:"Opportunités de financement et de partenariat", ent:"option",
   types:[{t:"Veille sur les opportunités"},{t:"Diffusion d'un appel ou d'une opportunité"},{t:"Positionnement d'entreprises sur une opportunité"}]},
  {code:"A6", lib:"Mises en relation", ent:"oui",
@@ -73,7 +73,7 @@ DB.listen("_error", function(col, err){ if(["realisations","adhesions","cade_par
 function refDoc(){ return PARAM.referentiel || {types:{}}; }
 function axe(code){ for(var i=0;i<AXES.length;i++) if(AXES[i].code===code) return AXES[i]; return null; }
 function typesOf(code){ var a=axe(code); if(!a) return []; return a.types.concat((refDoc().types||{})[code]||[]); }
-function typeOf(code, t){ var L=typesOf(code); for(var i=0;i<L.length;i++) if(L[i].t===t) return L[i]; return {t:t}; }
+function typeOf(code, t){ if(/^Masterclass \(MC1 à MC1\d\)$/.test(t||"")) t="Masterclass (MC1 à MC11)"; var L=typesOf(code); for(var i=0;i<L.length;i++) if(L[i].t===t) return L[i]; return {t:t}; }
 function plan(annee){
   var p=PARAM["annee_"+annee], cib={};
   INDIC.forEach(function(i){ cib[i.id]=(p && p.cibles && p.cibles[i.id]!=null) ? Number(p.cibles[i.id]) : i.def; });
@@ -557,7 +557,7 @@ function caissePrint(){
     k.L.map(function(x){ return '<tr><td>'+esc(heure(x.h))+'</td><td>'+esc(x.nat)+'</td><td>'+esc(x.ent||"")+'</td><td>'+esc(x.mode||"")+'</td><td>'+esc(x.recu||"")+'</td><td style="text-align:right">'+ent(x.mt)+'</td><td>'+esc(APP().court(x.a))+'</td></tr>'; }).join("")+
     '<tr><td colspan="5"><b>Total</b></td><td style="text-align:right"><b>'+ent(k.tot)+'</b></td><td></td></tr></tbody></table>'+
     '<h2>Par mode de paiement</h2><table><tbody>'+Object.keys(k.parMode).map(function(m){ return '<tr><td>'+esc(m)+'</td><td style="text-align:right">'+ent(k.parMode[m])+'</td></tr>'; }).join("")+'</tbody></table>'+
-    '<div class="sign"><div>Établi par</div><div>Vérifié par</div><div>Visa du responsable</div></div></div>';
+    '<div class="sign"><div>Établi par</div><div>Vérifié par</div><div>Visa du responsable gestion portefeuille des entreprises (programme Yokkute)</div></div></div>';
   APP().printHTML(h);
 }
 

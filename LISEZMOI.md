@@ -64,6 +64,12 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - Les années proposées vont de 2026 à l'année prochaine, sans limite : les données des années passées restent consultables.
 - **Important** : les règles `firestore.rules` ont encore changé. Recopiez-les dans Firebase › Firestore Database › Règles › Publier.
 
+## Masterclass MC11 : dynamique organisationnelle et gestion participative (version 1.4)
+- Onzième masterclass, destinée aux **GIE, coopératives et associations** : fondamentaux, organes de gouvernance, statuts et règlement intérieur, communication et conflits, planification et registres, transparence de la caisse, pérennisation et autodiagnostic. Recommandée en segments A et B, à proposer en C selon le diagnostic.
+- Classeur **MC11_Outils_participants.xlsx** (9 onglets) : carte d'identité, organes et rôles, conflits, réunions et PV, plan d'action, cotisations et caisse, autodiagnostic sur 24 critères, cas pratique « GIE Jappo Ndoffane » corrigé.
+- Cinq actions MC11 dans la bibliothèque (dimension « Leadership, RH et gouvernance »). Elles ne sont proposées dans le PDI que si la forme juridique de l'entreprise est GIE, coopérative ou association, et passent alors avant les actions individuelles. Elles s'ajoutent automatiquement à la bibliothèque à la première connexion du propriétaire.
+- Le guide du formateur se téléverse dans Masterclasses et outils, avec un nom de fichier contenant « MC11 » et « Guide » (par exemple `MC11_Guide_formateur.pdf`).
+
 ## Mettre à jour l'application
 Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 

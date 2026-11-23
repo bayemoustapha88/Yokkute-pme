@@ -492,7 +492,7 @@ function vPDI(){
     h+='<section class="card"><h3>Ajouter une action pour une autre dimension</h3><div style="display:flex;flex-direction:column;gap:8px">';
     DIMS.forEach(function(D,i){ if(present[i]) return; h+='<div style="border-bottom:1px solid var(--line);padding:6px 0"><b>'+D.nom+'</b> <span class="small muted">note '+e.notes[i]+'</span></div>'+adder("d"+i, i); });
     h+='</div></section>'; }
-  return h+'<section class="card"><h3>Engagements et signatures</h3><p class="small">L\'entreprise suit les formations recommandées, met en place les outils prévus, reçoit la visite mensuelle et partage ses chiffres. Le CADE assure le coaching, les formations et la mise en relation, et respecte la confidentialité. Le document imprimé comporte les cases de signature du promoteur, du conseiller et du chef de service.</p></section>';
+  return h+'<section class="card"><h3>Engagements et signatures</h3><p class="small">L\'entreprise suit les formations recommandées, met en place les outils prévus, reçoit la visite mensuelle et partage ses chiffres. Le CADE assure le coaching, les formations et la mise en relation, et respecte la confidentialité. Le document imprimé comporte les cases de signature du promoteur, du conseiller et du responsable gestion portefeuille des entreprises (programme Yokkute).</p></section>';
 }
 function pdiPrintHTML(e){
   var h='<div class="report"><p class="muted">'+esc(CFG.nomStructure)+' · '+esc(CFG.nomApplication)+'</p><h1>Plan de Développement Individuel</h1>'+
@@ -502,7 +502,7 @@ function pdiPrintHTML(e){
     '<table><thead><tr><th>N°</th><th>Formation recommandée et action</th><th>Outil ou modèle</th><th>Livrable</th><th>Partenaire</th><th>Début</th><th>Échéance</th></tr></thead><tbody>';
   e.pdi.forEach(function(p,i){ h+='<tr><td>'+(i+1)+'</td><td><b>'+esc(p.reco)+'</b><br>'+esc(p.action)+'</td><td>'+esc(p.outil||"")+'</td><td>'+esc(p.livrable)+'</td><td>'+esc(p.partenaire)+'</td><td>'+fd(p.debut)+'</td><td>'+fd(p.echeance)+'</td></tr>'; });
   h+='</tbody></table><h2>Engagements réciproques</h2><p>L\'entreprise s\'engage à suivre les formations recommandées, mettre en place les outils prévus, recevoir la visite mensuelle du conseiller et partager ses chiffres d\'activité. La CCIAK s\'engage à assurer le coaching, les formations prévues et la mise en relation avec les partenaires, et à respecter la confidentialité des informations communiquées.</p>'+
-    '<div class="sign"><div>Le promoteur<br>Nom, date et signature</div><div>Le conseiller référent<br>Nom, date et signature</div><div>Visa du chef de service</div></div></div>';
+    '<div class="sign"><div>Le promoteur<br>Nom, date et signature</div><div>Le conseiller référent<br>Nom, date et signature</div><div>Visa du responsable gestion portefeuille des entreprises (programme Yokkute)</div></div></div>';
   return h;
 }
 function printHTML(html){ var p=document.getElementById("print"); p.innerHTML=html; document.body.classList.add("printing"); setTimeout(function(){ window.print(); setTimeout(function(){ document.body.classList.remove("printing"); },500); },100); }
@@ -585,7 +585,7 @@ function televerserRes(input){
   var files=[].slice.call(input.files||[]); input.value=""; if(!isOwner() || !files.length) return;
   var ok=[], ko=[];
   files.forEach(function(f){ var c=resCode(f.name), k=resKind(f.name); if(!c || (c!=="KIT" && k==="autre")) ko.push(f.name); else ok.push({f:f, id:(c==="KIT"?"KIT_kit":c+"_"+k), code:c, kind:c==="KIT"?"kit":k}); });
-  if(ko.length) toast("Non reconnus (le nom doit contenir MC1…MC10 et « guide » ou « diaporama ») : "+ko.join(", "));
+  if(ko.length) toast("Non reconnus (le nom doit contenir MC1…MC11 et « guide » ou « diaporama ») : "+ko.join(", "));
   if(!ok.length) return;
   S.busy++; render();
   Promise.all(ok.map(function(o){
@@ -629,8 +629,8 @@ function vRessources(){
     if(bes.length){ h+='<h2 style="margin-top:8px">À proposer selon le diagnostic</h2>'; bes.forEach(function(c){ h+=carte(c,"Selon le diagnostic"); }); }
   }
   if(form){ var kit=RESS.KIT_kit;
-    h+='<section class="card"><h2>Kit de mise en œuvre des PDI</h2><p class="small">Fiches de présence, d\'engagement et d\'évaluation, attestation, coaching sur site, grilles de vérification de MC1 à MC10, compte rendu.</p><div class="row">'+(kit?'<button class="btn sm" data-act="resdl" data-id="KIT_kit">Télécharger le kit (PDF · '+taille(kit.taille)+')</button>':'<span class="small muted">Pas encore téléversé</span>')+'</div></section>'; }
-  if(isOwner()) h+='<section class="card"><h2>Téléverser les supports du formateur</h2><p class="small">Sélectionnez un ou plusieurs PDF. Le nom de chaque fichier doit contenir le code de la masterclass (MC1 à MC10) et le mot « Guide » ou « Diaporama », par exemple <i>MC6_Guide_formateur.pdf</i> ; le kit doit contenir « Kit ». Un nouveau fichier remplace l\'ancien. Seuls le propriétaire et les conseillers peuvent les télécharger.</p>'+
+    h+='<section class="card"><h2>Kit de mise en œuvre des PDI</h2><p class="small">Fiches de présence, d\'engagement et d\'évaluation, attestation, coaching sur site, grilles de vérification de MC1 à MC11, compte rendu.</p><div class="row">'+(kit?'<button class="btn sm" data-act="resdl" data-id="KIT_kit">Télécharger le kit (PDF · '+taille(kit.taille)+')</button>':'<span class="small muted">Pas encore téléversé</span>')+'</div></section>'; }
+  if(isOwner()) h+='<section class="card"><h2>Téléverser les supports du formateur</h2><p class="small">Sélectionnez un ou plusieurs PDF. Le nom de chaque fichier doit contenir le code de la masterclass (MC1 à MC11) et le mot « Guide » ou « Diaporama », par exemple <i>MC6_Guide_formateur.pdf</i> ; le kit doit contenir « Kit ». Un nouveau fichier remplace l\'ancien. Seuls le propriétaire et les conseillers peuvent les télécharger.</p>'+
     '<label class="btn primary" style="align-self:flex-start">'+(S.busy?"Envoi en cours…":"Choisir les fichiers")+'<input type="file" multiple accept=".pdf,.pptx,.docx" data-resup="1" hidden></label>'+
     (DB.mode==="local"?'<p class="small ko">Mode local : les supports restent sur cet appareil.</p>':'')+'</section>';
   return h;
