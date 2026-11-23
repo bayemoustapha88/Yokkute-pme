@@ -21,17 +21,21 @@ window.ykToast = toast;
 function byId(id){ for(var i=0;i<ENT.length;i++) if(ENT[i].id===id) return ENT[i]; return null; }
 function libById(id){ for(var i=0;i<LIB.length;i++) if(LIB[i].id===id) return LIB[i]; return null; }
 function membreNom(email){ if(!email) return "—"; if(email===OWNER) return "Propriétaire ("+email+")"; var m=MEMBRES.filter(function(x){return x.email===email;})[0]; return m&&m.nom ? m.nom : email; }
-function court(email){ if(!email) return "—"; if(email===ME.email) return "moi"; var m=MEMBRES.filter(function(x){return x.email===email;})[0]; return m&&m.nom ? m.nom : email.split("@")[0]; }
+function court(email){ if(!email) return "—"; if(email===ME.email) return "moi"; if(email===OWNER) return "Propriétaire"; var m=MEMBRES.filter(function(x){return x.email===email;})[0]; return m&&m.nom ? m.nom : email.split("@")[0]; }
 window.segOf = function(e){ return e.notes ? (e.override || segment(e.notes, e.projet)) : null; };
 function lastVisit(e){ var v=e.visites||[]; return v.length ? v[v.length-1].date : null; }
 
 /* ================= Droits ================= */
-var ROLES={proprietaire:"Propriétaire", conseiller:"Conseiller", accueil:"Accueil / caisse", lecteur:"Lecteur"};
+var ROLES={proprietaire:"Propriétaire", chef:"Responsable gestion portefeuille des entreprises (programme Yokkute)", conseiller:"Conseiller", accueil:"Accueil / caisse", lecteur:"Lecteur"};
 function isOwner(){ return ME && ME.role==="proprietaire"; }
-function isCons(){ return ME && ME.role==="conseiller"; }
+/* Le responsable gestion portefeuille (rôle technique « chef ») a les droits d'un conseiller, plus le pilotage : il voit et attribue toutes les tâches, réattribue les entreprises et fixe le plan annuel. */
+function isCons(){ return ME && (ME.role==="conseiller" || ME.role==="chef"); }
+function isChef(){ return ME && ME.role==="chef"; }
+function isMgr(){ return isOwner() || isChef(); }
+function cLab(c){ return c.email===ME.email ? (isOwner()?"Moi (propriétaire)":"Moi") : c.email===OWNER ? "Propriétaire" : (c.nom||c.email); }
 function canCreate(){ return isOwner() || isCons(); }
-function canEdit(e){ return isOwner() || (isCons() && e && e.conseiller===ME.email); }
-function conseillers(){ return [{email:OWNER, nom:"Moi (propriétaire)"}].concat(MEMBRES.filter(function(m){ return m.actif && m.role==="conseiller"; })); }
+function canEdit(e){ return isMgr() || (isCons() && e && e.conseiller===ME.email); }
+function conseillers(){ return [{email:OWNER, nom:"Moi (propriétaire)"}].concat(MEMBRES.filter(function(m){ return m.actif && (m.role==="conseiller" || m.role==="chef"); })); }
 
 /* ================= Persistance ================= */
 function strip(o){ var c=JSON.parse(JSON.stringify(o)); delete c._id; return c; }
@@ -144,10 +148,10 @@ function vTableau(){
   if(!alerts.length) h+='<p class="empty">Rien d\'urgent pour le moment.</p>';
   alerts.slice(0,10).forEach(function(a){ h+='<div class="alert" data-act="fiche" data-id="'+esc(a[0].id)+'" role="button" tabindex="0"><span class="feu '+a[1]+'"><i></i></span><div style="flex:1;min-width:0"><b>'+esc(a[0].nom)+'</b><div class="small muted">'+a[2]+(isOwner()&&a[0].conseiller!==OWNER?" · "+esc(court(a[0].conseiller)):"")+'</div></div><span class="small muted">Ouvrir ›</span></div>'; });
   h+='</section>';
-  if(isOwner() && MEMBRES.length){
+  if(isMgr() && MEMBRES.length){
     h+='<section class="card"><h2>Charge par conseiller</h2><div class="tablewrap"><table><thead><tr><th>Conseiller</th><th>Entreprises</th><th>Diagnostiquées</th><th>Tâches ouvertes</th><th class="hide-sm">Tâches en retard</th></tr></thead><tbody>';
     conseillers().forEach(function(c){ var l=ENT.filter(function(e){return e.conseiller===c.email;}), tk=TACHES.filter(function(t){return t.assigneA===c.email && t.statut!=="Fait";});
-      h+='<tr><td><b>'+esc(c.email===OWNER?"Moi":(c.nom||c.email))+'</b></td><td class="num">'+l.length+'</td><td class="num">'+l.filter(function(e){return e.notes;}).length+'</td><td class="num">'+tk.length+'</td><td class="hide-sm num">'+tk.filter(function(t){return t.echeance&&t.echeance<TODAY;}).length+'</td></tr>'; });
+      h+='<tr><td><b>'+esc(cLab(c))+'</b></td><td class="num">'+l.length+'</td><td class="num">'+l.filter(function(e){return e.notes;}).length+'</td><td class="num">'+tk.length+'</td><td class="hide-sm num">'+tk.filter(function(t){return t.echeance&&t.echeance<TODAY;}).length+'</td></tr>'; });
     h+='</tbody></table></div></section>';
   }
   return h;
@@ -168,7 +172,7 @@ function vEntreprises(){
   h+='<div class="card"><div class="filters" style="grid-template-columns:2fr 1fr 1fr'+(MEMBRES.length?' 1fr':'')+'"><label class="f s">Rechercher<input type="search" id="fq" value="'+esc(S.f.q)+'" placeholder="Nom, promoteur, matricule, commune, activité"></label>'+
     '<label class="f">Segment<select id="fseg"><option value="">Tous</option><option value="A">A · Structuration</option><option value="B">B · Consolidation</option><option value="C">C · Croissance</option><option value="none">À diagnostiquer</option></select></label>'+
     '<label class="f">Feu<select id="ffeu"><option value="">Tous</option><option>Vert</option><option>Orange</option><option>Rouge</option><option value="none">Pas encore suivi</option></select></label>'+
-    (MEMBRES.length?'<label class="f">Conseiller<select id="fcons"><option value="">Tous</option>'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'">'+esc(c.email===OWNER?"Propriétaire":(c.nom||c.email))+'</option>';}).join("")+'</select></label>':'')+'</div></div>';
+    (MEMBRES.length?'<label class="f">Conseiller<select id="fcons"><option value="">Tous</option>'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'">'+esc(cLab(c))+'</option>';}).join("")+'</select></label>':'')+'</div></div>';
   h+='<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Entreprise</th><th>Segment</th><th>Feu</th><th class="hide-sm">Activité</th><th class="hide-sm">Commune</th>'+(MEMBRES.length?'<th class="hide-sm">Conseiller</th>':'')+'<th class="hide-sm">Dernière visite</th></tr></thead><tbody>';
   if(!L.length) h+='<tr><td colspan="7" class="empty">'+(ENT.length?"Aucune entreprise ne correspond à ces filtres.":"Aucune entreprise enregistrée.")+'</td></tr>';
   L.forEach(function(e){ h+='<tr class="click" data-act="fiche" data-id="'+esc(e.id)+'" tabindex="0"><td><b>'+esc(e.nom)+'</b><div class="small muted">'+esc(e.prom)+' · '+esc(e.id)+'</div></td><td>'+segChip(segOf(e))+'</td><td>'+feuChip(e.feu)+'</td><td class="hide-sm">'+esc(e.activite||e.secteur)+'</td><td class="hide-sm">'+esc(e.commune)+'</td>'+(MEMBRES.length?'<td class="hide-sm">'+esc(court(e.conseiller))+'</td>':'')+'<td class="hide-sm">'+fd(lastVisit(e))+'</td></tr>'; });
@@ -302,7 +306,7 @@ function vFiche(){
     inf("Promoteur",e.prom+(e.genre||e.age?" ("+[e.genre==="F"?"femme":e.genre==="H"?"homme":"",AGES[e.age]?AGES[e.age].toLowerCase():""].filter(Boolean).join(", ")+")":""))+
     inf("Téléphone",e.tel||"—")+inf("Adresse",e.adresse||"—")+inf("Commune · département",(e.commune||"—")+" · "+(e.dept||"—"))+inf("Activité",e.activite||"—")+inf("Filière",e.secteur||"—")+
     inf("Forme juridique",e.forme||"—")+inf("NINEA · RCCM",(e.ninea||"—")+" · "+(e.rccm||"—"))+inf("Effectifs (permanents · temporaires)",(e.effP==null?"—":e.effP)+" · "+(e.effT==null?"—":e.effT))+'</div>';
-  if(isOwner()) h+='<label class="f" style="max-width:360px">Conseiller référent<select id="reassign">'+conseillers().map(function(c){ return '<option value="'+esc(c.email)+'"'+(c.email===e.conseiller?" selected":"")+'>'+esc(c.email===OWNER?"Moi (propriétaire)":(c.nom||c.email))+'</option>'; }).join("")+'</select></label>';
+  if(isMgr()) h+='<label class="f" style="max-width:360px">Conseiller référent<select id="reassign">'+conseillers().map(function(c){ return '<option value="'+esc(c.email)+'"'+(c.email===e.conseiller?" selected":"")+'>'+esc(cLab(c))+'</option>'; }).join("")+'</select></label>';
   else h+='<p class="small muted">Conseiller référent : '+esc(membreNom(e.conseiller))+'</p>';
   if(hl) h+='<p class="small muted">Dernière modification le '+fd(hl.date)+(hl.auteur?" par "+esc(court(hl.auteur)):"")+(hl.champs&&hl.champs.length?" : "+esc(hl.champs.join(", ")):"")+'.</p>';
   h+='</section>';
@@ -646,37 +650,91 @@ function vVisite(){
 }
 
 /* ================= Tâches ================= */
+/* Version 1.3 : chaque tâche peut être rattachée à un axe de la fiche de poste, avoir une priorité et se répéter chaque semaine ou chaque mois. */
+var TACHE_AXE={"Diagnostic":"A1","Visite de suivi":"A7","Préparation du PDI":"A2","Formation à animer":"A4","Mise en relation":"A6","Conseil":"A3","Opportunité à diffuser":"A5","Mise à jour de la base":"A8","Rapport":"A9","Relance de carte d'adhésion":"A1","Autre":""};
+var TYPES_T = Object.keys(TACHE_AXE);
+var PRIOS = ["Haute","Normale","Basse"], RECUR = {"":"Une seule fois", hebdo:"Chaque semaine", mensuel:"Chaque mois"};
+function enRetard(t){ return t.statut!=="Fait" && t.statut!=="Annulée" && t.echeance && t.echeance<TODAY; }
+function canDelTask(t){ return isMgr() || (t.creePar===ME.email && t.assigneA===ME.email); }
+/* Diagnostics et visites sont comptés depuis leur module : leur tâche se termine sans saisie d'activité. */
+function tacheAvecActivite(t){ return t.axe && t.type!=="Diagnostic" && t.type!=="Visite de suivi"; }
+function suiteTache(t){
+  if(!t.recurrence || t.suiteCreee) return;
+  var n=strip(t); delete n.id; n.echeance=addDur(t.echeance||TODAY, 1, t.recurrence==="hebdo"?"semaines":"mois"); n.statut="À faire"; n.dateFait=null; n.commentaire=""; n.realisationId=null; n.suiteCreee=false; n.dateCreation=now();
+  DB.add("taches", n); t.suiteCreee=true;
+}
+function terminerTache(t, realId){
+  var old=t.statut; t.statut="Fait"; t.dateFait=TODAY; if(realId) t.realisationId=realId;
+  suiteTache(t); DB.save("taches", t.id, strip(t));
+  if(old!=="Fait") journal("tache_faite", t.entrepriseId?byId(t.entrepriseId):null, "Tâche terminée : "+t.titre);
+}
+function lundi(off){ var d=new Date(TODAY+"T00:00:00Z"), w=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-w+7*(off||0)); return d.toISOString().slice(0,10); }
+function prioTag(p){ return p==="Haute" ? '<span class="tag ess">Priorité haute</span>' : p==="Basse" ? '<span class="tag">Priorité basse</span>' : ''; }
 function vTaches(){
-  var L=TACHES.slice();
-  if(!isOwner()) L=L.filter(function(t){ return t.assigneA===ME.email || t.creePar===ME.email; });
-  if(S.tf.statut==="ouvertes") L=L.filter(function(t){return t.statut!=="Fait";}); else if(S.tf.statut==="faites") L=L.filter(function(t){return t.statut==="Fait";});
+  var L=TACHES.slice(), mgr=isMgr();
+  if(!mgr) L=L.filter(function(t){ return t.assigneA===ME.email || t.creePar===ME.email; });
   if(S.tf.qui) L=L.filter(function(t){return t.assigneA===S.tf.qui;});
-  L.sort(function(a,b){ return (a.statut==="Fait")-(b.statut==="Fait") || ((a.echeance||"9")<(b.echeance||"9")?-1:1); });
-  var h='<div class="row between"><div><p class="eyebrow">'+(isOwner()?"Attribution et suivi":"Mes tâches")+'</p><h1>Tâches</h1></div>'+(isOwner()?'<button class="btn primary" data-act="newtask">+ Nouvelle tâche</button>':'')+'</div>';
+  if(S.tf.axe) L=L.filter(function(t){return (t.axe||"")===S.tf.axe;});
+  var vue=S.tf.vue||"liste";
+  var h='<div class="row between"><div><p class="eyebrow">'+(mgr?"Attribution et suivi":"Mes tâches")+'</p><h1>Tâches</h1></div>'+(canCreate()?'<button class="btn primary" data-act="newtask">+ Nouvelle tâche</button>':'')+'</div>';
   if(S.newTask) h+=vTaskForm();
-  h+='<div class="card"><div class="filters" style="grid-template-columns:1fr 1fr"><label class="f">Afficher<select id="tfst"><option value="ouvertes"'+(S.tf.statut==="ouvertes"?" selected":"")+'>Tâches ouvertes</option><option value="faites"'+(S.tf.statut==="faites"?" selected":"")+'>Tâches terminées</option><option value=""'+(!S.tf.statut?" selected":"")+'>Toutes</option></select></label>'+
-    (isOwner()?'<label class="f">Attribuée à<select id="tfqui"><option value="">Tout le monde</option>'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'"'+(S.tf.qui===c.email?" selected":"")+'>'+esc(c.email===OWNER?"Moi":(c.nom||c.email))+'</option>';}).join("")+'</select></label>':'<div></div>')+'</div></div>';
+  var axes=window.YK_CADE.AXES;
+  h+='<div class="card"><div class="row segtabs"><button class="btn sm'+(vue==="liste"?" primary":" ghost")+'" data-act="tvue" data-v="liste">Liste</button><button class="btn sm'+(vue==="semaine"?" primary":" ghost")+'" data-act="tvue" data-v="semaine">Semaine</button></div>'+
+    '<div class="filters" style="grid-template-columns:repeat(3,minmax(0,1fr))">'+(vue==="liste"?'<label class="f">Afficher<select id="tfst"><option value="ouvertes"'+(S.tf.statut==="ouvertes"?" selected":"")+'>Tâches ouvertes</option><option value="retard"'+(S.tf.statut==="retard"?" selected":"")+'>En retard</option><option value="faites"'+(S.tf.statut==="faites"?" selected":"")+'>Tâches terminées</option><option value=""'+(!S.tf.statut?" selected":"")+'>Toutes</option></select></label>':'<div></div>')+
+    (mgr?'<label class="f">Attribuée à<select id="tfqui"><option value="">Tout le monde</option>'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'"'+(S.tf.qui===c.email?" selected":"")+'>'+esc(cLab(c))+'</option>';}).join("")+'</select></label>':'<div></div>')+
+    '<label class="f">Axe<select id="tfaxe"><option value="">Tous les axes</option>'+axes.map(function(x){ return '<option value="'+x.code+'"'+(S.tf.axe===x.code?" selected":"")+'>'+x.code+' · '+esc(x.lib)+'</option>'; }).join("")+'</select></label></div></div>';
+  if(vue==="semaine") return h+vSemaine(L);
+  if(S.tf.statut==="ouvertes") L=L.filter(function(t){return t.statut!=="Fait";}); else if(S.tf.statut==="faites") L=L.filter(function(t){return t.statut==="Fait";}); else if(S.tf.statut==="retard") L=L.filter(enRetard);
+  var PR={Haute:0,Normale:1,Basse:2};
+  L.sort(function(a,b){ return (a.statut==="Fait")-(b.statut==="Fait") || (enRetard(b)-enRetard(a)) || ((PR[a.priorite]||1)-(PR[b.priorite]||1)) || ((a.echeance||"9")<(b.echeance||"9")?-1:1); });
+  h+='<p class="small muted">'+L.length+' tâche(s)'+(L.filter(enRetard).length?' · <b class="ko">'+L.filter(enRetard).length+' en retard</b>':'')+'</p>';
   if(!L.length) h+='<p class="empty">Aucune tâche à afficher.</p>';
-  L.forEach(function(t){ var late=t.statut!=="Fait" && t.echeance && t.echeance<TODAY, mine=t.assigneA===ME.email||isOwner();
-    h+='<div class="task'+(late?" late":"")+(t.statut==="Fait"?" done":"")+'"><div class="row between" style="align-items:flex-start"><div style="min-width:0"><b>'+esc(t.titre)+'</b><div class="small muted">'+esc(t.type)+(t.entrepriseNom?' · <a href="#" data-act="fiche" data-id="'+esc(t.entrepriseId)+'">'+esc(t.entrepriseNom)+'</a>':'')+' · attribuée à '+esc(court(t.assigneA))+' par '+esc(court(t.creePar))+' · échéance '+fd(t.echeance)+(late?' <b class="ko">en retard</b>':'')+'</div>'+(t.description?'<p class="small">'+esc(t.description)+'</p>':'')+'</div>'+
+  L.forEach(function(t){ var late=enRetard(t), mine=t.assigneA===ME.email||mgr;
+    h+='<div class="task'+(late?" late":"")+(t.statut==="Fait"?" done":"")+'"><div class="row between" style="align-items:flex-start"><div style="min-width:0"><b>'+(t.axe?'<span class="tag">'+esc(t.axe)+'</span> ':'')+esc(t.titre)+'</b> '+prioTag(t.priorite)+(t.recurrence?' <span class="tag">'+RECUR[t.recurrence]+'</span>':'')+
+      '<div class="small muted">'+esc(t.type)+(t.typeAction?' · '+esc(t.typeAction):'')+(t.entrepriseNom?' · <a href="#" data-act="fiche" data-id="'+esc(t.entrepriseId)+'">'+esc(t.entrepriseNom)+'</a>':'')+' · attribuée à '+esc(court(t.assigneA))+' par '+esc(court(t.creePar))+' · échéance '+fd(t.echeance)+(late?' <b class="ko">en retard de '+days(t.echeance,TODAY)+' j</b>':'')+'</div>'+(t.description?'<p class="small">'+esc(t.description)+'</p>':'')+'</div>'+
       (mine?'<select data-tst="'+esc(t.id)+'" style="width:auto" aria-label="Statut">'+["À faire","En cours","Fait"].map(function(x){return '<option'+(x===t.statut?" selected":"")+'>'+x+'</option>';}).join("")+'</select>':stat(t.statut))+'</div>'+
+      (mine && t.statut!=="Fait" && tacheAvecActivite(t)?'<div class="row"><button class="btn sm primary" data-act="c_fromtask" data-id="'+esc(t.id)+'">Terminer et saisir l\'activité réalisée</button></div>':'')+
       (mine?'<input type="text" data-tcom="'+esc(t.id)+'" value="'+esc(t.commentaire||"")+'" placeholder="Commentaire ou compte rendu (enregistré en quittant le champ)">':(t.commentaire?'<p class="small">'+esc(t.commentaire)+'</p>':''))+
-      (t.dateFait?'<p class="small muted">Terminée le '+fd(t.dateFait)+'</p>':'')+
-      (isOwner()?'<div class="row"><button class="btn ghost danger sm" data-act="deltask" data-id="'+esc(t.id)+'">Supprimer la tâche</button></div>':'')+'</div>'; });
+      (t.dateFait?'<p class="small muted">Terminée le '+fd(t.dateFait)+(t.realisationId?' · activité enregistrée dans le journal':'')+'</p>':'')+
+      (canDelTask(t)?'<div class="row"><button class="btn ghost danger sm" data-act="deltask" data-id="'+esc(t.id)+'">'+(S.confirmT===t.id?"Confirmer la suppression":"Supprimer la tâche")+'</button></div>':'')+'</div>'; });
+  return h;
+}
+/* Vue « Semaine » : une ligne par membre, une colonne par jour, les tâches placées à leur échéance. */
+function vSemaine(L){
+  var off=S.tf.sem||0, d0=lundi(off), jours=[0,1,2,3,4,5,6].map(function(i){ return addDur(d0,i,"jours"); }), fin=jours[6];
+  var J=["Lun.","Mar.","Mer.","Jeu.","Ven.","Sam.","Dim."];
+  var gens=isMgr() ? conseillers().filter(function(c){ return !S.tf.qui || c.email===S.tf.qui; }) : [{email:ME.email, nom:"Moi"}];
+  var avant=L.filter(function(t){ return enRetard(t) && t.echeance<d0; });
+  var h='<section class="card"><div class="row between"><button class="btn sm ghost" data-act="tsem" data-v="-1">‹ Semaine précédente</button><b>Semaine du '+fd(d0)+' au '+fd(fin)+'</b><button class="btn sm ghost" data-act="tsem" data-v="1">Semaine suivante ›</button></div>'+
+    (off?'<div><button class="linkbtn" data-act="tsem" data-v="0">Revenir à cette semaine</button></div>':'');
+  if(avant.length && off===0) h+='<p class="small"><b class="ko">'+avant.length+' tâche(s) en retard</b> d\'avant cette semaine : affichez la vue « Liste », filtre « En retard ».</p>';
+  h+='<div class="tablewrap"><table class="semaine"><thead><tr><th>Membre</th>'+jours.map(function(j,i){ return '<th'+(j===TODAY?' style="color:var(--accent)"':'')+'>'+J[i]+' '+Number(j.slice(8))+'</th>'; }).join("")+'</tr></thead><tbody>';
+  gens.forEach(function(g){
+    h+='<tr><td><b>'+esc(cLab(g))+'</b></td>'+jours.map(function(j){
+      var T=L.filter(function(t){ return t.assigneA===g.email && t.echeance===j && t.statut!=="Annulée"; });
+      return '<td style="vertical-align:top;min-width:110px">'+T.map(function(t){ var late=enRetard(t);
+        return '<div class="small" style="border-left:3px solid '+(t.statut==="Fait"?"var(--good)":late?"var(--bad)":t.priorite==="Haute"?"var(--accent)":"var(--line)")+';padding:2px 0 2px 6px;margin-bottom:6px;'+(t.statut==="Fait"?"opacity:.6;text-decoration:line-through":"")+'">'+(t.axe?'<b>'+esc(t.axe)+'</b> ':'')+esc(t.titre)+'</div>'; }).join("")+'</td>'; }).join("")+'</tr>'; });
+  h+='</tbody></table></div><p class="small muted">Bordure rouge : en retard · orange : priorité haute · verte : terminée.</p></section>';
   return h;
 }
 function vTaskForm(){
-  var t=S.newTask;
+  var t=S.newTask, mgr=isMgr();
   var ents=ENT.slice().sort(function(a,b){return a.nom<b.nom?-1:1;});
+  var axes=window.YK_CADE.AXES, tys=t.axe?window.YK_CADE.typesOf(t.axe):[];
   return '<section class="editor"><h3 class="full">Nouvelle tâche</h3>'+
     '<label class="f full">Titre<input type="text" id="tk_titre" value="'+esc(t.titre)+'" placeholder="Ex. : Réaliser le diagnostic 360°"></label>'+
-    '<label class="f">Type<select id="tk_type">'+TYPES_TACHE.map(function(x){return '<option'+(t.type===x?" selected":"")+'>'+x+'</option>';}).join("")+'</select></label>'+
-    '<label class="f">Attribuée à<select id="tk_qui">'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'"'+(t.assigneA===c.email?" selected":"")+'>'+esc(c.email===OWNER?"Moi":(c.nom||c.email))+'</option>';}).join("")+'</select></label>'+
+    '<label class="f">Type<select id="tk_type">'+TYPES_T.map(function(x){return '<option'+(t.type===x?" selected":"")+'>'+x+'</option>';}).join("")+'</select></label>'+
+    '<label class="f">Axe de la fiche de poste<select id="tk_axe"><option value="">Sans axe</option>'+axes.map(function(x){ return '<option value="'+x.code+'"'+(t.axe===x.code?" selected":"")+'>'+x.code+' · '+esc(x.lib)+'</option>'; }).join("")+'</select></label>'+
+    (tys.length && tacheAvecActivite(t)?'<label class="f full">Type d\'action (pour la saisie de l\'activité)<select id="tk_ta">'+tys.map(function(x){ return '<option'+(t.typeAction===x.t?" selected":"")+'>'+esc(x.t)+'</option>'; }).join("")+'</select></label>':'')+
+    (mgr?'<label class="f">Attribuée à<select id="tk_qui">'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'"'+(t.assigneA===c.email?" selected":"")+'>'+esc(cLab(c))+'</option>';}).join("")+'</select></label>':'<p class="small muted">Tâche pour vous-même.</p>')+
     '<label class="f">Échéance<input type="date" id="tk_ech" value="'+esc(t.echeance)+'"></label>'+
+    '<label class="f">Priorité<select id="tk_prio">'+PRIOS.map(function(x){ return '<option'+(t.priorite===x?" selected":"")+'>'+x+'</option>'; }).join("")+'</select></label>'+
+    '<label class="f">Répétition<select id="tk_rec">'+Object.keys(RECUR).map(function(k){ return '<option value="'+k+'"'+(t.recurrence===k?" selected":"")+'>'+RECUR[k]+'</option>'; }).join("")+'</select></label>'+
     '<label class="f full">Entreprise concernée (facultatif)<select id="tk_ent"><option value="">Aucune</option>'+ents.map(function(e){return '<option value="'+esc(e.id)+'"'+(t.entrepriseId===e.id?" selected":"")+'>'+esc(e.nom)+' · '+esc(e.id)+'</option>';}).join("")+'</select></label>'+
-    '<label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="tk_attr"'+(t.attribuer?" checked":"")+'> Attribuer aussi l\'entreprise à ce conseiller (il pourra la diagnostiquer et suivre son PDI)</label>'+
+    (mgr?'<label class="full" style="display:flex;gap:8px;align-items:center"><input type="checkbox" id="tk_attr"'+(t.attribuer?" checked":"")+'> Attribuer aussi l\'entreprise à ce conseiller (il pourra la diagnostiquer et suivre son PDI)</label>':'')+
     '<label class="f full">Consignes<textarea id="tk_desc">'+esc(t.description)+'</textarea></label>'+
-    '<div class="full row between"><button class="btn ghost" data-act="canceltask">Annuler</button><button class="btn primary" data-act="savetask">Attribuer la tâche</button></div></section>';
+    '<p class="small muted full">Une tâche répétée se recrée automatiquement à l\'échéance suivante dès qu\'elle est terminée.</p>'+
+    '<div class="full row between"><button class="btn ghost" data-act="canceltask">Annuler</button><button class="btn primary" data-act="savetask">'+(mgr?"Attribuer la tâche":"Créer la tâche")+'</button></div></section>';
 }
 
 /* ================= Rapports ================= */
@@ -799,15 +857,15 @@ function libEditor(){
 /* ================= Équipe et partage ================= */
 function vEquipe(){
   var h='<div><p class="eyebrow">'+(isOwner()?"Droits d'accès":"Votre accès")+'</p><h1>'+(isOwner()?"Équipe et partage":"Équipe et exports")+'</h1></div>';
-  h+='<section class="card"><h2>Membres</h2><p class="muted">Chaque membre se connecte avec son compte Google. Un <b>conseiller</b> peut réaliser les diagnostics, suivre les PDI et faire les visites des entreprises qui lui sont attribuées, et recevoir des tâches. Un agent d\'<b>accueil / caisse</b> enregistre les visiteurs et les ventes de cartes d\'adhésion dans « Activités CADE ». Un <b>lecteur</b> consulte tout sans rien modifier (hiérarchie, partenaires internes).</p>';
+  h+='<section class="card"><h2>Membres</h2><p class="muted">Chaque membre se connecte avec son compte Google. Un <b>conseiller</b> peut réaliser les diagnostics, suivre les PDI et faire les visites des entreprises qui lui sont attribuées, et recevoir des tâches. Le <b>Responsable gestion portefeuille des entreprises (programme Yokkute)</b> est aussi conseiller (diagnostics, PDI, visites, tâches pour lui-même) ; en plus, il voit toute l\'équipe, attribue les tâches, réattribue les entreprises, fixe le plan annuel et corrige les saisies. Un agent d\'<b>accueil / caisse</b> enregistre les visiteurs et les ventes de cartes d\'adhésion dans « Activités CADE ». Un <b>lecteur</b> consulte tout sans rien modifier (hiérarchie, partenaires internes).</p>';
   h+='<div class="tablewrap"><table><thead><tr><th>Membre</th><th>Rôle</th><th class="hide-sm">Entreprises</th><th>Accès</th>'+(isOwner()?'<th></th>':'')+'</tr></thead><tbody>';
   h+='<tr><td><b>'+esc(OWNER)+'</b></td><td>Propriétaire</td><td class="hide-sm num">'+ENT.filter(function(e){return e.conseiller===OWNER;}).length+'</td><td><span class="ok">Actif</span></td>'+(isOwner()?'<td></td>':'')+'</tr>';
   MEMBRES.slice().sort(function(a,b){return a.email<b.email?-1:1;}).forEach(function(m){
-    h+='<tr><td><b>'+esc(m.nom||m.email)+'</b><div class="small muted">'+esc(m.email)+'</div></td><td>'+(isOwner()?'<select data-mrole="'+esc(m.email)+'" style="width:auto">'+["conseiller","accueil","lecteur"].map(function(r){ return '<option value="'+r+'"'+(m.role===r?" selected":"")+'>'+ROLES[r]+'</option>'; }).join("")+'</select>':(ROLES[m.role]||m.role))+'</td>'+
+    h+='<tr><td><b>'+esc(m.nom||m.email)+'</b><div class="small muted">'+esc(m.email)+'</div></td><td>'+(isOwner()?'<select data-mrole="'+esc(m.email)+'" style="width:100%;max-width:240px" title="'+esc(ROLES[m.role]||m.role)+'">'+["chef","conseiller","accueil","lecteur"].map(function(r){ return '<option value="'+r+'"'+(m.role===r?" selected":"")+'>'+ROLES[r]+'</option>'; }).join("")+'</select>':(ROLES[m.role]||m.role))+'</td>'+
       '<td class="hide-sm num">'+ENT.filter(function(e){return e.conseiller===m.email;}).length+'</td><td>'+(m.actif?'<span class="ok">Actif</span>':'<span class="ko">Suspendu</span>')+'</td>'+
       (isOwner()?'<td><div class="row"><button class="btn sm ghost" data-act="mtog" data-id="'+esc(m.email)+'">'+(m.actif?"Suspendre":"Réactiver")+'</button><button class="btn sm ghost danger" data-act="mdel" data-id="'+esc(m.email)+'">Retirer</button></div></td>':'')+'</tr>'; });
   h+='</tbody></table></div>';
-  if(isOwner()) h+='<div class="grid g4" style="align-items:end"><label class="f">Nom<input type="text" id="m_nom" placeholder="Prénom et nom"></label><label class="f">Adresse Gmail<input type="email" id="m_mail" placeholder="nom@gmail.com"></label><label class="f">Rôle<select id="m_role"><option value="conseiller">Conseiller</option><option value="accueil">Accueil / caisse</option><option value="lecteur">Lecteur</option></select></label><div><button class="btn primary" data-act="madd">Ajouter le membre</button></div></div>'+
+  if(isOwner()) h+='<div class="grid g4" style="align-items:end"><label class="f">Nom<input type="text" id="m_nom" placeholder="Prénom et nom"></label><label class="f">Adresse Gmail<input type="email" id="m_mail" placeholder="nom@gmail.com"></label><label class="f">Rôle<select id="m_role"><option value="chef">Responsable gestion portefeuille des entreprises (programme Yokkute)</option><option value="conseiller" selected>Conseiller</option><option value="accueil">Accueil / caisse</option><option value="lecteur">Lecteur</option></select></label><div><button class="btn primary" data-act="madd">Ajouter le membre</button></div></div>'+
     '<p class="small muted">Retirer un membre ne supprime pas son travail : ses entreprises restent dans la base et peuvent être réattribuées.</p>';
   h+='</section>';
   h+='<section class="card"><h2>Exports</h2><div class="grid g3">'+
@@ -922,16 +980,21 @@ document.addEventListener("click", function(ev){
     e6.feu=v.feu; v.statuts.forEach(function(s,i){ var p=e6.pdi[i]; if(!p) return; if(s==="Fait" && p.statut!=="Fait"){ p.dateFait=v.date; p.faitPar=ME.email; faites++; } if(s!=="Fait"){ p.dateFait=null; } p.statut=s; });
     saveEnt(e6); journal("visite", e6, "Visite de suivi · feu "+v.feu+(faites?" · "+faites+" action(s) réalisée(s)":"")+(v.ca?" · CA du mois "+money(v.ca):""));
     toast("Visite enregistrée."); go("fiche", e6.id); }
-  else if(a==="newtask"){ S.newTask={titre:"", type:"Diagnostic", assigneA:OWNER, echeance:addDur(TODAY,2,"semaines"), entrepriseId:"", description:"", attribuer:true}; render(); }
+  else if(a==="newtask"){ S.newTask={titre:"", type:"Diagnostic", axe:"A1", typeAction:"", priorite:"Normale", recurrence:"", assigneA:isMgr()?OWNER:ME.email, echeance:addDur(TODAY,2,"semaines"), entrepriseId:"", description:"", attribuer:isMgr()}; render(); }
+  else if(a==="tvue"){ S.tf.vue=t.getAttribute("data-v"); render(); }
+  else if(a==="tsem"){ var dv=Number(t.getAttribute("data-v")); S.tf.sem=dv===0?0:(S.tf.sem||0)+dv; render(); }
   else if(a==="canceltask"){ S.newTask=null; render(); }
   else if(a==="savetask"){ var nt=S.newTask; if(!nt.titre.trim()){ toast("Donnez un titre à la tâche."); return; }
     var te=nt.entrepriseId?byId(nt.entrepriseId):null;
-    var tk={titre:nt.titre.trim(), type:nt.type, assigneA:nt.assigneA, creePar:ME.email, echeance:nt.echeance, entrepriseId:te?te.id:"", entrepriseNom:te?te.nom:"", description:nt.description, statut:"À faire", dateCreation:now(), commentaire:""};
+    if(!isMgr()) nt.assigneA=ME.email;
+    var tys=nt.axe?window.YK_CADE.typesOf(nt.axe):[], ta=tacheAvecActivite(nt)?(nt.typeAction||(tys[0]&&tys[0].t)||""):"";
+    var tk={titre:nt.titre.trim(), type:nt.type, axe:nt.axe||"", typeAction:ta, priorite:nt.priorite||"Normale", recurrence:nt.recurrence||"", suiteCreee:false, realisationId:null,
+      assigneA:nt.assigneA, creePar:ME.email, echeance:nt.echeance, entrepriseId:te?te.id:"", entrepriseNom:te?te.nom:"", description:nt.description, statut:"À faire", dateCreation:now(), commentaire:""};
     DB.add("taches", tk);
-    if(te && nt.attribuer && te.conseiller!==nt.assigneA){ te.conseiller=nt.assigneA; te.hist=(te.hist||[]).concat([{date:TODAY, auteur:ME.email, champs:["Attribuée à "+membreNom(nt.assigneA)]}]); saveEnt(te); journal("attribution", te, "Entreprise attribuée à "+membreNom(nt.assigneA)); }
+    if(te && nt.attribuer && isMgr() && te.conseiller!==nt.assigneA){ te.conseiller=nt.assigneA; te.hist=(te.hist||[]).concat([{date:TODAY, auteur:ME.email, champs:["Attribuée à "+membreNom(nt.assigneA)]}]); saveEnt(te); journal("attribution", te, "Entreprise attribuée à "+membreNom(nt.assigneA)); }
     journal("tache_creee", te, "Tâche « "+tk.titre+" » attribuée à "+membreNom(nt.assigneA)+" (échéance "+fd(nt.echeance)+")");
     S.newTask=null; toast("Tâche attribuée."); render(); }
-  else if(a==="deltask"){ DB.del("taches", t.getAttribute("data-id")); toast("Tâche supprimée."); }
+  else if(a==="deltask"){ var dt=t.getAttribute("data-id"); if(S.confirmT!==dt){ S.confirmT=dt; render(); return; } S.confirmT=null; DB.del("taches", dt); toast("Tâche supprimée."); }
   else if(a==="raprint"){ printHTML(rapportHTML(calcRapport(), true)); }
   else if(a==="rapxls"){ YKX.exportRapport(calcRapport()); }
   else if(a==="libnew"){ var dd=Number(t.getAttribute("data-dim")||0); S.edit={id:"new", dim:dd, segs:["A","B"], t:{n:2}, module:DIMS[dd].mods[0], action:"", outil:"", livrable:"", modalite:"Formation collective", partenaire:"CADE", mois:3, unite:"mois", type:"essentiel", nature:"formation", actif:true}; render(); showEditor(); }
@@ -981,14 +1044,16 @@ document.addEventListener("change", function(ev){
   if(t.id==="bseg"){ S.bseg=t.value; render(); return; }
   if(t.id==="tfst"){ S.tf.statut=t.value; render(); return; }
   if(t.id==="tfqui"){ S.tf.qui=t.value; render(); return; }
+  if(t.id==="tfaxe"){ S.tf.axe=t.value; render(); return; }
   if(t.id==="rtype"){ S.rap.type=t.value; S.rap.idx = t.value==="mois"?Number(TODAY.slice(5,7)) : t.value==="trimestre"?Math.ceil(Number(TODAY.slice(5,7))/3) : t.value==="semestre"?(Number(TODAY.slice(5,7))<=6?1:2) : 1; render(); return; }
   if(t.id==="ridx"){ S.rap.idx=Number(t.value); render(); return; }
   if(t.id==="ran"){ S.rap.annee=Number(t.value); render(); return; }
   if(t.id==="reassign"){ var er=byId(S.id); er.conseiller=t.value; er.hist=(er.hist||[]).concat([{date:TODAY, auteur:ME.email, champs:["Attribuée à "+membreNom(t.value)]}]); saveEnt(er); journal("attribution", er, "Entreprise attribuée à "+membreNom(t.value)); toast("Entreprise attribuée à "+membreNom(t.value)+"."); return; }
   if(t.id && t.id.indexOf("ne_")===0 && t.tagName==="SELECT"){ S.newEnt[t.id.slice(3)]=t.value; return; }
-  if(t.id && t.id.indexOf("tk_")===0){ var nt=S.newTask, k=t.id.slice(3); if(k==="attr") nt.attribuer=t.checked; else if(k==="type") nt.type=t.value; else if(k==="qui") nt.assigneA=t.value; else if(k==="ent"){ nt.entrepriseId=t.value; var te=byId(t.value); if(te && !nt.titre) { nt.titre=(nt.type==="Diagnostic"?"Réaliser le diagnostic 360° de ":nt.type+" · ")+te.nom; render(); } } else if(k==="ech") nt.echeance=t.value; return; }
-  if(t.hasAttribute("data-tst")){ var tsk=TACHES.filter(function(x){return x.id===t.getAttribute("data-tst");})[0]; var old=tsk.statut; tsk.statut=t.value; tsk.dateFait=t.value==="Fait"?TODAY:null; DB.save("taches", tsk.id, strip(tsk));
-    if(t.value==="Fait" && old!=="Fait") journal("tache_faite", tsk.entrepriseId?byId(tsk.entrepriseId):null, "Tâche terminée : "+tsk.titre); toast("Statut de la tâche mis à jour."); return; }
+  if(t.id && t.id.indexOf("tk_")===0){ var nt=S.newTask, k=t.id.slice(3); if(k==="attr") nt.attribuer=t.checked; else if(k==="type"){ nt.type=t.value; if(TACHE_AXE[t.value]!=null) nt.axe=TACHE_AXE[t.value]; nt.typeAction=""; render(); } else if(k==="axe"){ nt.axe=t.value; nt.typeAction=""; render(); } else if(k==="ta") nt.typeAction=t.value; else if(k==="prio") nt.priorite=t.value; else if(k==="rec") nt.recurrence=t.value; else if(k==="qui") nt.assigneA=t.value; else if(k==="ent"){ nt.entrepriseId=t.value; var te=byId(t.value); if(te && !nt.titre) { nt.titre=(nt.type==="Diagnostic"?"Réaliser le diagnostic 360° de ":nt.type+" · ")+te.nom; render(); } } else if(k==="ech") nt.echeance=t.value; return; }
+  if(t.hasAttribute("data-tst")){ var tsk=TACHES.filter(function(x){return x.id===t.getAttribute("data-tst");})[0];
+    if(t.value==="Fait"){ terminerTache(tsk); toast(tsk.recurrence?"Tâche terminée : la suivante est programmée.":"Tâche terminée."); return; }
+    tsk.statut=t.value; tsk.dateFait=null; DB.save("taches", tsk.id, strip(tsk)); toast("Statut de la tâche mis à jour."); return; }
   if(t.hasAttribute("data-tcom")){ var tc=TACHES.filter(function(x){return x.id===t.getAttribute("data-tcom");})[0]; tc.commentaire=t.value; DB.save("taches", tc.id, strip(tc)); toast("Commentaire enregistré."); return; }
   if(t.hasAttribute("data-p")){ var e=byId(S.id), p=e.pdi[Number(t.getAttribute("data-p"))], k3=t.getAttribute("data-k"), old2=p.statut;
     p[k3]=k3==="duree"?(Number(t.value)||1):t.value;
@@ -1032,6 +1097,7 @@ window.addEventListener("beforeprint", function(){ if(!document.body.classList.c
 
 /* Passerelle vers le module « Activités CADE » (cade.js). */
 window.YK_APP = { get ME(){ return ME; }, get ENT(){ return ENT; }, get MEMBRES(){ return MEMBRES; },
+  get TACHES(){ return TACHES; }, OWNER:OWNER, S_view:function(){ return S.view; }, conseillers:conseillers, isMgr:isMgr, terminerTache:terminerTache, enRetard:enRetard, printHTML:printHTML,
   render:render, refresh:refresh, go:go, journal:journal, court:court, byId:byId, toast:toast };
 if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn(e); });
 render();

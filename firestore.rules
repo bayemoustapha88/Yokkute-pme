@@ -7,7 +7,10 @@ service cloud.firestore {
     function isOwner() { return signedIn() && email() == 'baye.moustaphandiaye88@gmail.com'; }
     function member() { return get(/databases/$(database)/documents/membres/$(email())).data; }
     function isMember() { return signedIn() && exists(/databases/$(database)/documents/membres/$(email())) && member().actif == true; }
-    function isConseiller() { return isMember() && member().role == 'conseiller'; }
+    // Le responsable gestion portefeuille (rôle « chef ») a les droits d'un conseiller, plus le pilotage (tâches, réattribution, plan annuel, corrections).
+    function isConseiller() { return isMember() && (member().role == 'conseiller' || member().role == 'chef'); }
+    function isChef() { return isMember() && member().role == 'chef'; }
+    function isMgr() { return isOwner() || isChef(); }
     function isAccueil() { return isMember() && member().role == 'accueil'; }
     function isStaff() { return isOwner() || isConseiller() || isAccueil(); }
     function canRead() { return isOwner() || isMember(); }
@@ -18,8 +21,8 @@ service cloud.firestore {
 
     match /entreprises/{id} {
       allow read: if canRead();
-      allow create: if isOwner() || (isConseiller() && request.resource.data.conseiller == email());
-      allow update: if isOwner() || (isConseiller() && resource.data.conseiller == email() && request.resource.data.conseiller == email());
+      allow create: if isMgr() || (isConseiller() && request.resource.data.conseiller == email());
+      allow update: if isMgr() || (isConseiller() && resource.data.conseiller == email() && request.resource.data.conseiller == email());
       allow delete: if isOwner();
     }
     match /bibliotheque/{id} {
@@ -33,10 +36,13 @@ service cloud.firestore {
     }
     match /taches/{id} {
       allow read: if canRead();
-      allow create, delete: if isOwner();
-      allow update: if isOwner() || (isConseiller() && resource.data.assigneA == email()
+      // Le responsable portefeuille attribue à tous ; un conseiller crée ses propres tâches (et la suite d'une tâche répétée qui lui est attribuée).
+      allow create: if isMgr() || (isConseiller() && request.resource.data.assigneA == email());
+      allow delete: if isMgr() || (isConseiller() && resource.data.assigneA == email() && resource.data.creePar == email());
+      allow update: if isMgr() || (isConseiller() && resource.data.assigneA == email()
                        && request.resource.data.assigneA == resource.data.assigneA
-                       && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut','commentaire','dateFait']));
+                       && (resource.data.creePar == email()
+                           || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statut','commentaire','dateFait','realisationId','suiteCreee'])));
     }
     // Pièces justificatives : morceaux de fichiers (base64), lus par l'équipe, ajoutés par le propriétaire et les conseillers.
     match /fichiers/{id} {
@@ -64,21 +70,21 @@ service cloud.firestore {
       allow read: if canRead();
       allow create: if request.resource.data.auteur == email() && request.resource.data.creeMs is number
                     && (isOwner() || isConseiller() || (isAccueil() && request.resource.data.axe == 'A1'));
-      allow update: if isOwner() || (isStaff() && auteurRecent() && (!isAccueil() || request.resource.data.axe == 'A1'));
-      allow delete: if isOwner() || (isStaff() && resource.data.auteur == email() && request.time.toMillis() - resource.data.creeMs < 604800000);
+      allow update: if isMgr() || (isStaff() && auteurRecent() && (!isAccueil() || request.resource.data.axe == 'A1'));
+      allow delete: if isMgr() || (isStaff() && resource.data.auteur == email() && request.time.toMillis() - resource.data.creeMs < 604800000);
     }
-    // Cartes d'adhésion : jamais supprimées ; seul le propriétaire les annule (statut « Annulée »).
+    // Cartes d'adhésion : jamais supprimées ; le propriétaire ou le responsable portefeuille les annule (statut « Annulée »).
     match /adhesions/{id} {
       allow read: if canRead();
       allow create: if isStaff() && request.resource.data.auteur == email() && request.resource.data.creeMs is number
                     && request.resource.data.statut == 'Valide';
-      allow update: if isOwner() || (isStaff() && auteurRecent() && request.resource.data.statut == resource.data.statut);
+      allow update: if isMgr() || (isStaff() && auteurRecent() && request.resource.data.statut == resource.data.statut);
       allow delete: if false;
     }
-    // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire.
+    // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire ou le responsable portefeuille.
     match /cade_param/{id} {
       allow read: if canRead();
-      allow write: if isOwner();
+      allow write: if isMgr();
     }
   }
 }

@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.2, phase 1).
+/* Yokkute PME — module « Activités CADE » (version 1.3 : phases 1 et 2).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, cade_param. */
@@ -86,16 +86,27 @@ function cibleCartes(P){ return P.cartes.reduce(function(s,c){ return s+num(c.ta
 /* ================= Droits ================= */
 function role(){ return ME() ? ME().role : ""; }
 function isOwner(){ return role()==="proprietaire"; }
+function isMgr(){ return role()==="proprietaire" || role()==="chef"; }
 function isAccueil(){ return role()==="accueil"; }
-function canSaisir(){ return isOwner() || role()==="conseiller" || isAccueil(); }
+function isConsLike(){ return role()==="proprietaire" || role()==="chef" || role()==="conseiller"; }
+function canSaisir(){ return isConsLike() || isAccueil(); }
+function canVoirEquipe(){ return isMgr() || role()==="lecteur"; }
 function recent(x){ return x.creeMs && (Date.now()-x.creeMs) < SEPT_JOURS; }
-function canEditDoc(x){ return isOwner() || (canSaisir() && x.auteur===ME().email && recent(x)); }
+function canEditDoc(x){ return isMgr() || (canSaisir() && x.auteur===ME().email && recent(x)); }
 function axesSaisissables(){ return isAccueil() ? AXES.filter(function(a){ return a.code==="A1"; }) : AXES; }
 
 /* ================= Périodes ================= */
+/* Années proposées : de 2026 (mise en service) à l'année prochaine, plus toute année où des données existent. */
+function annees(){
+  var y=Number(TODAY.slice(0,4)), set={}; for(var a=2026; a<=y+1; a++) set[a]=1;
+  REAL.concat(ADH).forEach(function(x){ var z=Number(String(x.date||"").slice(0,4)); if(z>2000) set[z]=1; });
+  Object.keys(PARAM).forEach(function(k){ var m=k.match(/^annee_(\d{4})$/); if(m) set[Number(m[1])]=1; });
+  return Object.keys(set).map(Number).sort();
+}
+function yearOpts(cur){ var L=annees(); if(L.indexOf(cur)<0){ L.push(cur); L.sort(); } return L.map(function(z){ return '<option'+(z===cur?" selected":"")+'>'+z+'</option>'; }).join(""); }
 var MOISN=["Janvier","Février","Mars","Avril","Mai","Juin","Juillet","Août","Septembre","Octobre","Novembre","Décembre"];
 var C = {tab:"tableau", per:{type:"annee", annee:Number(TODAY.slice(0,4)), idx:Number(TODAY.slice(5,7))}, form:null, adh:null, jf:{axe:"", qui:"", q:""},
-         planEdit:null, planAnnee:Number(TODAY.slice(0,4)), ntype:null, annuler:null};
+         planEdit:null, planAnnee:Number(TODAY.slice(0,4)), ntype:null, annuler:null, caisse:{date:TODAY, tous:false}};
 function periode(r){
   var y=r.annee, a, b, lab, mois;
   function fin(yy,mm){ return new Date(Date.UTC(yy,mm,0)).toISOString().slice(0,10); }
@@ -148,19 +159,28 @@ function aRelancer(){
 /* ================= Composants ================= */
 function couleur(t){ return t==null ? "var(--muted)" : t>=90 ? "var(--good)" : t>=60 ? "var(--warn)" : "var(--bad)"; }
 function barre(t){ var w=Math.max(0,Math.min(100,t||0)); return '<div class="bar" style="min-width:90px"><span style="width:'+w+'%;background:'+couleur(t)+'"></span></div>'; }
+function tabList(){
+  var T=[];
+  if(isConsLike()) T.push(["moi","Mon espace"]);
+  if(canSaisir()) T.push(["caisse","Accueil / caisse"]);
+  T.push(["tableau","Tableau de bord"]);
+  if(canVoirEquipe()) T.push(["equipe","Pilotage de l'équipe"]);
+  T.push(["journal","Journal des activités"],["cartes","Cartes d'adhésion"],["plan","Plan annuel et référentiel"]);
+  return T;
+}
 function tabs(){
-  var T=[["tableau","Tableau de bord"],["journal","Journal des activités"],["cartes","Cartes d'adhésion"],["plan","Plan annuel et référentiel"]];
+  var T=tabList();
   return '<div class="row segtabs">'+T.map(function(x){ return '<button class="btn sm'+(C.tab===x[0]?" primary":" ghost")+'" data-act="c_tab" data-v="'+x[0]+'">'+x[1]+'</button>'; }).join("")+'</div>';
 }
 function perSelect(){
-  var p=C.per, y0=Number(TODAY.slice(0,4)), yrs=[y0-1,y0,y0+1], idx="";
+  var p=C.per, idx="";
   if(p.type==="mois") idx=MOISN.map(function(m,i){ return '<option value="'+(i+1)+'"'+(p.idx===i+1?" selected":"")+'>'+m+'</option>'; }).join("");
   else if(p.type==="trimestre") idx=[1,2,3,4].map(function(i){ return '<option value="'+i+'"'+(p.idx===i?" selected":"")+'>T'+i+'</option>'; }).join("");
   else if(p.type==="semestre") idx=[1,2].map(function(i){ return '<option value="'+i+'"'+(p.idx===i?" selected":"")+'>S'+i+'</option>'; }).join("");
   return '<div class="card"><div class="filters" style="grid-template-columns:1fr 1fr 1fr"><label class="f">Période<select id="c_ptype">'+
     [["mois","Mois"],["trimestre","Trimestre"],["semestre","Semestre"],["annee","Année"]].map(function(x){ return '<option value="'+x[0]+'"'+(p.type===x[0]?" selected":"")+'>'+x[1]+'</option>'; }).join("")+'</select></label>'+
     (idx?'<label class="f">Lequel<select id="c_pidx">'+idx+'</select></label>':'<div></div>')+
-    '<label class="f">Année<select id="c_pan">'+yrs.map(function(y){ return '<option'+(p.annee===y?" selected":"")+'>'+y+'</option>'; }).join("")+'</select></label></div></div>';
+    '<label class="f">Année<select id="c_pan">'+yearOpts(p.annee)+'</select></label></div></div>';
 }
 function entList(){
   return '<datalist id="c_ents">'+APP().ENT.slice().sort(function(a,b){ return a.nom<b.nom?-1:1; }).map(function(e){ return '<option value="'+esc(e.nom+" · "+e.id)+'"></option>'; }).join("")+'</datalist>';
@@ -178,7 +198,7 @@ function rulesWarn(){
 /* ================= Écran : tableau de bord ================= */
 function vTableau(){
   var per=C.per, K=calc(per), P=K.P, Pl=plan(per.annee), part=P.part, ec=ecoule(P), h=perSelect();
-  if(!Pl.existe) h+='<p class="ro-banner">Les cibles affichées sont des <b>valeurs d\'exemple</b>. Le propriétaire les remplace dans « Plan annuel et référentiel ».</p>';
+  if(!Pl.existe) h+='<p class="ro-banner">Les cibles affichées sont des <b>valeurs d\'exemple</b>. Le propriétaire ou le responsable portefeuille les remplace dans « Plan annuel et référentiel ».</p>';
   function fin(lib, real, cibleAn, sous){
     var cib=cibleAn*part, t=pct(real,cib), proj=ec>0 && ec<1 ? real/ec : null;
     return '<div class="card"><span class="small muted">'+lib+'</span><b class="num" style="font-family:var(--f-display);font-size:1.5rem">'+ent(real)+' <span class="small muted">FCFA</span></b>'+barre(t)+
@@ -220,7 +240,7 @@ function vTableau(){
 function nouvelleReal(){ var ax=axesSaisissables()[0].code; return {date:TODAY, axe:ax, type:typesOf(ax)[0].t, entTxt:"", participants:"", femmes:"", montant:"", mode:"Espèces", recu:"", institution:INSTITUTIONS[0], montantDemande:"", montantObtenu:"", obs:""}; }
 function vForm(){
   var f=C.form, a=axe(f.axe), ty=typeOf(f.axe, f.type);
-  var h='<section class="editor"><h3 class="full">'+(f.id?"Modifier l'activité":"Nouvelle activité réalisée")+'</h3>'+
+  var h='<section class="editor"><h3 class="full">'+(f.id?"Modifier l'activité":"Nouvelle activité réalisée")+'</h3>'+(f.tacheTitre?'<p class="small full">Pour la tâche : <b>'+esc(f.tacheTitre)+'</b></p>':'')+
     '<label class="f">Date<input type="date" id="cf_date" value="'+esc(f.date)+'" max="'+TODAY+'"></label>'+
     '<label class="f">Axe de la fiche de poste<select id="cf_axe">'+axesSaisissables().map(function(x){ return '<option value="'+x.code+'"'+(f.axe===x.code?" selected":"")+'>'+x.code+' · '+esc(x.lib)+'</option>'; }).join("")+'</select></label>'+
     '<label class="f full">Type d\'action<select id="cf_type">'+typesOf(f.axe).map(function(x){ return '<option'+(f.type===x.t?" selected":"")+'>'+esc(x.t)+'</option>'; }).join("")+'</select></label>';
@@ -234,7 +254,7 @@ function vForm(){
     '<label class="f">Montant demandé (FCFA)<input type="number" min="0" step="1000" id="cf_dem" value="'+esc(f.montantDemande)+'"></label>'+
     '<label class="f">Montant obtenu (FCFA, si accordé)<input type="number" min="0" step="1000" id="cf_obt" value="'+esc(f.montantObtenu)+'"></label><div></div>';
   h+='<label class="f full">Observation ou compte rendu<textarea id="cf_obs" placeholder="Ce qui a été fait, résultat, suite à donner…">'+esc(f.obs)+'</textarea></label>'+
-    '<div class="full row between"><button class="btn ghost" data-act="c_fcancel">Annuler</button><button class="btn primary" data-act="c_fsave">Enregistrer l\'activité</button></div></section>';
+    '<div class="full row between"><button class="btn ghost" data-act="c_fcancel">Annuler</button><button class="btn primary" data-act="c_fsave">'+(f.taskId?"Enregistrer et terminer la tâche":"Enregistrer l\'activité")+'</button></div></section>';
   return h;
 }
 function saveForm(){
@@ -251,8 +271,14 @@ function saveForm(){
     institution:ty.f?f.institution:"", montantDemande:ty.f?num(f.montantDemande):null, montantObtenu:ty.f?num(f.montantObtenu):null,
     obs:String(f.obs||"").trim(), auteur:old?old.auteur:ME().email, creeLe:old?old.creeLe:new Date().toISOString(), creeMs:old?old.creeMs:Date.now(), majLe:new Date().toISOString(), majPar:ME().email};
   if(old){ doc.id=old.id; DB.save("realisations", old.id, doc); toast("Activité modifiée."); }
-  else { DB.add("realisations", doc); APP().journal("realisation", e, a.code+" · "+f.type+(doc.montant?" · "+money(doc.montant):"")); toast("Activité enregistrée."); }
-  C.form=null; APP().render();
+  else { var rid=DB.add("realisations", doc); APP().journal("realisation", e, a.code+" · "+f.type+(doc.montant?" · "+money(doc.montant):""));
+    var tk=f.taskId ? APP().TACHES.filter(function(x){ return x.id===f.taskId; })[0] : null;
+    if(tk){ APP().terminerTache(tk, rid); toast("Activité enregistrée et tâche terminée"+(tk.recurrence?" (la suivante est programmée).":".")); }
+    else toast("Activité enregistrée."); }
+  var retour=f.retour; C.form=null;
+  if(retour==="taches"){ APP().go("taches"); return; }
+  if(retour){ C.tab=retour; }
+  APP().render();
 }
 function vJournal(){
   var h=rulesWarn();
@@ -315,7 +341,7 @@ function saveAdh(){
     auteur:old?old.auteur:ME().email, creeLe:old?old.creeLe:new Date().toISOString(), creeMs:old?old.creeMs:Date.now(), majLe:new Date().toISOString(), majPar:ME().email};
   if(old){ doc.id=old.id; DB.save("adhesions", old.id, doc); toast("Vente modifiée."); }
   else { DB.add("adhesions", doc); APP().journal("adhesion", e, doc.nature+" · "+doc.categorieLib+" · "+money(doc.montant)); toast("Carte enregistrée."); }
-  C.adh=null; APP().render();
+  var ret=f.retour; C.adh=null; if(ret) C.tab=ret; APP().render();
 }
 function vCartes(){
   var h=rulesWarn(), y=C.per.annee, Pl=plan(y);
@@ -323,7 +349,7 @@ function vCartes(){
   var tot=V.reduce(function(s,x){ return s+num(x.montant); },0), cib=cibleCartes(Pl);
   if(canSaisir()) h+='<div class="row between"><p class="small muted">Chaque carte vendue ou renouvelée alimente directement l\'objectif financier « cartes d\'adhésion ».</p>'+(C.adh?'':'<button class="btn primary" data-act="c_anew">+ Vendre une carte</button>')+'</div>';
   if(C.adh) h+=vAdhForm();
-  h+='<section class="card"><div class="row between"><h2>Recettes des cartes · '+y+'</h2><div class="row"><select id="c_cyear" style="width:auto">'+[y-1,y,y+1].map(function(z){ return '<option'+(z===y?" selected":"")+'>'+z+'</option>'; }).join("")+'</select></div></div>'+
+  h+='<section class="card"><div class="row between"><h2>Recettes des cartes · '+y+'</h2><div class="row"><select id="c_cyear" style="width:auto">'+yearOpts(y)+'</select></div></div>'+
     '<div class="grid g3">'+
     '<div class="card kpi"><span class="v num">'+ent(tot)+'</span><span class="l">FCFA encaissés sur '+ent(cib)+' visés ('+(pct(tot,cib)==null?"—":pct(tot,cib)+" %")+')</span>'+barre(pct(tot,cib))+'</div>'+
     '<div class="card kpi"><span class="v num">'+V.length+'</span><span class="l">cartes, dont '+V.filter(function(x){return x.nature!=="Renouvellement";}).length+' nouvelles adhésions</span></div>';
@@ -347,17 +373,17 @@ function vCartes(){
   else { h+='<div class="tablewrap"><table><thead><tr><th>Date</th><th>Entreprise</th><th class="hide-sm">Catégorie</th><th class="num">Montant</th><th class="hide-sm">Reçu</th><th class="hide-sm">Valable jusqu\'au</th><th></th></tr></thead><tbody>';
     A.sort(function(a,b){ return a.date<b.date?1:-1; }).forEach(function(x){ var an=x.statut==="Annulée";
       h+='<tr style="'+(an?"opacity:.55;text-decoration:line-through":"")+'"><td>'+fd(x.date)+'</td><td>'+esc(x.entrepriseNom)+'<div class="small muted">'+esc(x.nature)+(x.matricule?' · '+esc(x.matricule):'')+' · '+esc(APP().court(x.auteur))+(an?' · annulée : '+esc(x.motifAnnulation||""):'')+'</div></td><td class="hide-sm">'+esc(x.categorieLib||x.categorie)+'</td><td class="num">'+ent(num(x.montant))+'</td><td class="hide-sm">'+esc(x.recu||"—")+'</td><td class="hide-sm">'+fd(x.echeance)+'</td><td>'+
-        (!an && canEditDoc(x)?'<button class="btn sm ghost" data-act="c_aedit" data-id="'+esc(x.id)+'">Modifier</button>':'')+(!an && isOwner()?'<button class="btn sm ghost danger" data-act="c_aannul" data-id="'+esc(x.id)+'">Annuler</button>':'')+'</td></tr>';
+        (!an && canEditDoc(x)?'<button class="btn sm ghost" data-act="c_aedit" data-id="'+esc(x.id)+'">Modifier</button>':'')+(!an && isMgr()?'<button class="btn sm ghost danger" data-act="c_aannul" data-id="'+esc(x.id)+'">Annuler</button>':'')+'</td></tr>';
       if(C.annuler===x.id) h+='<tr><td colspan="7"><div class="confirm"><label class="f">Motif de l\'annulation (obligatoire)<input type="text" id="c_motif" placeholder="Ex. : erreur de saisie, doublon, remboursement"></label><div class="row"><button class="btn sm ghost" data-act="c_aannulno">Retour</button><button class="btn sm danger" data-act="c_aannulok" data-id="'+esc(x.id)+'">Confirmer l\'annulation</button></div></div></td></tr>'; });
-    h+='</tbody></table></div><p class="small muted">Une recette ne se supprime pas : le propriétaire l\'annule avec un motif, et la ligne reste visible pour la traçabilité.</p>'; }
+    h+='</tbody></table></div><p class="small muted">Une recette ne se supprime pas : le propriétaire ou le responsable portefeuille l\'annule avec un motif, et la ligne reste visible pour la traçabilité.</p>'; }
   return h+'</section>';
 }
 
 /* ================= Écran : plan annuel et référentiel ================= */
 function vPlan(){
-  var y=C.planAnnee, Pl=plan(y), ed=isOwner(), E=C.planEdit && C.planEdit.annee===y ? C.planEdit : null, src=E||Pl;
+  var y=C.planAnnee, Pl=plan(y), ed=isMgr(), E=C.planEdit && C.planEdit.annee===y ? C.planEdit : null, src=E||Pl;
   var h=rulesWarn()+'<section class="card"><div class="row between"><div><h2>Plan annuel '+y+'</h2><p class="small muted">'+(Pl.existe?"Enregistré le "+fd(Pl.majLe)+" par "+esc(APP().court(Pl.majPar)):"Pas encore enregistré : les valeurs ci-dessous sont des exemples.")+'</p></div>'+
-    '<div class="row"><select id="c_plyear" style="width:auto">'+[y-1,y,y+1].map(function(z){ return '<option'+(z===y?" selected":"")+'>'+z+'</option>'; }).join("")+'</select>'+
+    '<div class="row"><select id="c_plyear" style="width:auto">'+yearOpts(y)+'</select>'+
     (ed && !E?'<button class="btn primary" data-act="c_pledit">Modifier les cibles</button>':'')+'</div></div>';
   var dis=E?"":" disabled";
   h+='<h3>Cibles opérationnelles par axe</h3><div class="tablewrap"><table><thead><tr><th>Axe</th><th>Indicateur</th><th class="num">Cible annuelle</th><th class="num hide-sm">Par mois</th></tr></thead><tbody>';
@@ -377,7 +403,7 @@ function vPlan(){
   if(E) h+='<div class="row between"><button class="btn ghost" data-act="c_plcancel">Annuler</button><button class="btn primary" data-act="c_plsave">Enregistrer le plan '+y+'</button></div>';
   h+='<p class="small muted">Les cibles de la période (mois, trimestre, semestre) sont calculées au prorata de la cible annuelle.</p></section>';
 
-  h+='<section class="card"><h2>Référentiel des axes et types d\'actions</h2><p class="small muted">Chaque activité saisie choisit un axe et un type d\'action. '+(ed?"Vous pouvez ajouter des types d'actions propres au CADE.":"Seul le propriétaire peut compléter cette liste.")+'</p>';
+  h+='<section class="card"><h2>Référentiel des axes et types d\'actions</h2><p class="small muted">Chaque activité saisie choisit un axe et un type d\'action. '+(ed?"Vous pouvez ajouter des types d'actions propres au CADE.":"Seuls le propriétaire et le responsable portefeuille peuvent compléter cette liste.")+'</p>';
   var aj=(refDoc().types)||{};
   AXES.forEach(function(a){
     h+='<div class="lib-row"><div class="row between"><b><span class="tag">'+a.code+'</span> '+esc(a.lib)+'</b><span class="small muted">Entreprise : '+({oui:"obligatoire",option:"facultative",non:"sans objet"})[a.ent]+'</span></div><div class="small">'+
@@ -416,9 +442,133 @@ function xlsAdh(){
     "Nature":x.nature, "Montant":x.montant, "Mode de paiement":x.modePaiement||"", "Reçu":x.recu||"", "Valable jusqu'au":x.echeance, "Statut":x.statut, "Motif d'annulation":x.motifAnnulation||"", "Saisi par":x.auteur}; }));
 }
 
+/* ================= Phase 2 : dernier contact avec une entreprise ================= */
+function contacts(){
+  var M={};
+  function up(id, d){ d=String(d||"").slice(0,10); if(id && d && (!M[id] || d>M[id])) M[id]=d; }
+  APP().ENT.forEach(function(e){ (e.visites||[]).forEach(function(v){ up(e.id, v.date); }); (e.diags||[]).forEach(function(d){ up(e.id, d.date); }); up(e.id, e.pdiValide); });
+  REAL.forEach(function(r){ up(r.entrepriseId, r.date); });
+  return M;
+}
+function etape(e){ return !e.notes ? "À diagnostiquer" : !e.pdiValide ? "PDI à valider" : "En suivi"; }
+function sansContact(e, M){ var d=M[e.id]; return d ? days(d, TODAY) : null; }
+function days(a,b){ return Math.round((Date.parse(b)-Date.parse(a))/864e5); }
+function lundi(){ var d=new Date(TODAY+"T00:00:00Z"), w=(d.getUTCDay()+6)%7; d.setUTCDate(d.getUTCDate()-w); return d.toISOString().slice(0,10); }
+function tacheLigne(t){
+  var late=APP().enRetard(t), act=t.axe && t.type!=="Diagnostic" && t.type!=="Visite de suivi";
+  return '<div class="alert" style="cursor:default"><b class="'+(late?"ko":"")+'" style="min-width:92px">'+fd(t.echeance)+'</b><div style="flex:1;min-width:0">'+(t.axe?'<span class="tag">'+esc(t.axe)+'</span> ':'')+esc(t.titre)+
+    (t.priorite==="Haute"?' <span class="tag ess">haute</span>':'')+(t.entrepriseNom?'<div class="small muted">'+esc(t.entrepriseNom)+'</div>':'')+'</div>'+
+    (act?'<button class="btn sm primary" data-act="c_fromtask" data-id="'+esc(t.id)+'">Terminer</button>':'<button class="btn sm ghost" data-act="go" data-v="taches">Ouvrir</button>')+'</div>';
+}
+
+/* ================= Écran : Mon espace (conseiller, responsable portefeuille, propriétaire) ================= */
+function vMoi(){
+  var me=ME().email, T=APP().TACHES.filter(function(t){ return t.assigneA===me && t.statut!=="Fait" && t.statut!=="Annulée"; });
+  var fin7=addDur(TODAY,7,"jours"), retard=T.filter(function(t){ return APP().enRetard(t); }), auj=T.filter(function(t){ return t.echeance===TODAY; }),
+      sem=T.filter(function(t){ return t.echeance>TODAY && t.echeance<=fin7; });
+  function tri(L){ return L.sort(function(a,b){ return (a.echeance||"")<(b.echeance||"")?-1:1; }); }
+  var h='<div class="row between"><p class="small muted">Votre journée : ce qui est en retard, ce qui est prévu, et vos entreprises à recontacter.</p><div class="row">'+
+    '<button class="btn primary" data-act="c_qreal" data-r="moi">+ Saisir une activité</button><button class="btn" data-act="c_qcarte" data-r="moi">+ Vendre une carte</button></div></div>';
+  h+='<div class="grid g3">'+kpiC(retard.length,"tâche(s) en retard",retard.length?"var(--bad)":null)+kpiC(auj.length,"tâche(s) pour aujourd'hui")+kpiC(sem.length,"tâche(s) dans les 7 prochains jours")+'</div>';
+  h+='<section class="card"><div class="row between"><h2>Mes tâches</h2><button class="btn sm ghost" data-act="go" data-v="taches">Toutes mes tâches ›</button></div>';
+  if(!T.length) h+='<p class="empty">Aucune tâche ouverte. Vous pouvez en créer une dans « Tâches ».</p>';
+  if(retard.length) h+='<h3 class="ko">En retard</h3>'+tri(retard).map(tacheLigne).join("");
+  if(auj.length) h+='<h3>Aujourd\'hui</h3>'+auj.map(tacheLigne).join("");
+  if(sem.length) h+='<h3>Cette semaine</h3>'+tri(sem).map(tacheLigne).join("");
+  var plus=T.length-retard.length-auj.length-sem.length; if(plus>0) h+='<p class="small muted">… et '+plus+' tâche(s) à plus de 7 jours.</p>';
+  h+='</section>';
+
+  var M=contacts(), E=APP().ENT.filter(function(e){ return e.conseiller===me; }).map(function(e){ return {e:e, j:sansContact(e,M)}; })
+    .sort(function(a,b){ return (b.j==null?1e6:b.j)-(a.j==null?1e6:a.j); });
+  var froid=E.filter(function(x){ return x.j==null || x.j>60; }).length;
+  h+='<section class="card"><div class="row between"><h2>Mes entreprises ('+E.length+')</h2>'+(froid?'<span class="small ko"><b>'+froid+'</b> sans contact depuis plus de 60 jours</span>':'')+'</div>';
+  if(!E.length) h+='<p class="empty">Aucune entreprise ne vous est encore attribuée.</p>';
+  else { h+='<div class="tablewrap"><table><thead><tr><th>Entreprise</th><th>Étape</th><th>Dernier contact</th><th class="num">Jours</th></tr></thead><tbody>'+
+    E.slice(0,15).map(function(x){ var late=x.j==null||x.j>60; return '<tr class="click" data-act="fiche" data-id="'+esc(x.e.id)+'"><td><b>'+esc(x.e.nom)+'</b> <span class="small muted">'+esc(x.e.id)+'</span></td><td>'+etape(x.e)+'</td><td>'+(M[x.e.id]?fd(M[x.e.id]):"Jamais")+'</td><td class="num '+(late?"ko":"")+'"><b>'+(x.j==null?"—":x.j)+'</b></td></tr>'; }).join("")+'</tbody></table></div>';
+    if(E.length>15) h+='<p class="small muted">Les 15 entreprises sans contact depuis le plus longtemps sont affichées.</p>'; }
+  h+='</section>';
+
+  var y=TODAY.slice(0,7), R=REAL.filter(function(r){ return r.auteur===me && String(r.date).slice(0,7)===y; }), parAxe={};
+  R.forEach(function(r){ parAxe[r.axe]=(parAxe[r.axe]||0)+1; });
+  var enc=R.reduce(function(s2,r){ return s2+num(r.montant); },0)+ADH.filter(function(x){ return x.auteur===me && x.statut!=="Annulée" && String(x.date).slice(0,7)===y; }).reduce(function(s2,x){ return s2+num(x.montant); },0);
+  var tot=REAL.filter(function(r){ return String(r.date).slice(0,7)===y; }).length;
+  h+='<section class="card"><h2>Mes résultats · '+MOISN[Number(y.slice(5))-1]+' '+y.slice(0,4)+'</h2><p class="small">'+R.length+' activité(s) saisie(s)'+(tot?' ('+Math.round(R.length/tot*100)+' % de l\'équipe)':'')+' · <b>'+ent(enc)+' FCFA</b> encaissés (prestations et cartes).</p>';
+  if(R.length) h+='<div class="row">'+AXES.filter(function(a){ return parAxe[a.code]; }).map(function(a){ return '<span class="tag" title="'+esc(a.lib)+'">'+a.code+' · '+parAxe[a.code]+'</span>'; }).join("")+'</div>';
+  return h+'</section>';
+}
+function kpiC(v,l,col){ return '<div class="card kpi"><span class="v num"'+(col?' style="color:'+col+'"':'')+'>'+v+'</span><span class="l">'+l+'</span></div>'; }
+
+/* ================= Écran : Pilotage de l'équipe (responsable portefeuille, propriétaire, lecteur) ================= */
+function vEquipe(){
+  var K=calc(C.per), P=K.P, inP=function(d){ d=String(d||"").slice(0,10); return d && d>=P.debut && d<=P.fin; }, T=APP().TACHES, M=contacts(), E=APP().ENT;
+  var h=perSelect();
+  var gens=APP().conseillers().concat(APP().MEMBRES.filter(function(m){ return m.actif && m.role==="accueil"; }));
+  h+='<section class="card"><h2>Charge et résultats de l\'équipe · '+esc(P.label)+'</h2><div class="tablewrap"><table><thead><tr><th>Membre</th><th class="num">Tâches ouvertes</th><th class="num">En retard</th><th class="num">Terminées</th><th class="num">Activités saisies</th><th class="num hide-sm">Encaissé (FCFA)</th><th class="num hide-sm">Entreprises</th><th class="num hide-sm">Sans contact &gt; 60 j</th></tr></thead><tbody>';
+  gens.forEach(function(g){ var em=g.email, to=T.filter(function(t){ return t.assigneA===em && t.statut!=="Fait" && t.statut!=="Annulée"; }), lr=to.filter(APP().enRetard).length,
+      tf=T.filter(function(t){ return t.assigneA===em && t.statut==="Fait" && inP(t.dateFait); }).length, ra=K.R.filter(function(r){ return r.auteur===em; }),
+      enc=ra.reduce(function(s2,r){ return s2+num(r.montant); },0)+ADH.filter(function(x){ return x.auteur===em && x.statut!=="Annulée" && inP(x.date); }).reduce(function(s2,x){ return s2+num(x.montant); },0),
+      es=E.filter(function(e){ return e.conseiller===em; }), froid=es.filter(function(e){ var j=sansContact(e,M); return e.pdiValide && (j==null || j>60); }).length;
+    h+='<tr><td><b>'+esc(APP().court(em))+'</b><div class="small muted">'+esc(g.role==="accueil"?"Accueil / caisse":g.role==="chef"?"Responsable portefeuille":em===APP().OWNER?"Propriétaire":"Conseiller")+'</div></td><td class="num">'+to.length+'</td><td class="num '+(lr?"ko":"")+'"><b>'+lr+'</b></td><td class="num">'+tf+'</td><td class="num"><b>'+ra.length+'</b></td><td class="num hide-sm">'+ent(enc)+'</td><td class="num hide-sm">'+es.length+'</td><td class="num hide-sm '+(froid?"ko":"")+'">'+froid+'</td></tr>'; });
+  h+='</tbody></table></div><p class="small muted">« Sans contact » : entreprises en suivi (PDI validé) sans visite, diagnostic ni activité enregistrés depuis plus de 60 jours.</p></section>';
+
+  var late=T.filter(APP().enRetard).sort(function(a,b){ return a.echeance<b.echeance?-1:1; });
+  var froids=E.filter(function(e){ var j=sansContact(e,M); return e.pdiValide && (j==null || j>60); }).sort(function(a,b){ return (M[a.id]||"")<(M[b.id]||"")?-1:1; });
+  var rel=aRelancer(), y=Number(TODAY.slice(0,4));
+  h+='<section class="card"><h2>Alertes</h2>';
+  var al=[];
+  if(!plan(y).existe) al.push('<div class="alert" data-act="c_tab" data-v="plan"><span class="feu Orange"><i></i></span><div style="flex:1"><b>Le plan '+y+' n\'est pas enregistré</b><div class="small muted">Les cibles affichées sont des exemples.</div></div><span class="small muted">Ouvrir ›</span></div>');
+  if(!plan(y+1).existe && TODAY.slice(5)>="10-01") al.push('<div class="alert" data-act="c_tab" data-v="plan"><span class="feu Orange"><i></i></span><div style="flex:1"><b>Préparer le plan '+(y+1)+'</b><div class="small muted">À enregistrer avant le 1er janvier.</div></div><span class="small muted">Ouvrir ›</span></div>');
+  if(rel.length) al.push('<div class="alert" data-act="c_tab" data-v="cartes"><span class="feu Orange"><i></i></span><div style="flex:1"><b>'+rel.length+' carte(s) d\'adhésion à relancer</b><div class="small muted">Échues récemment ou à échéance dans les 30 jours.</div></div><span class="small muted">Ouvrir ›</span></div>');
+  late.slice(0,8).forEach(function(t){ al.push('<div class="alert" data-act="go" data-v="taches"><span class="feu Rouge"><i></i></span><div style="flex:1;min-width:0"><b>'+esc(t.titre)+'</b><div class="small muted">'+esc(APP().court(t.assigneA))+' · échéance '+fd(t.echeance)+' · '+days(t.echeance,TODAY)+' j de retard</div></div><span class="small muted">Tâches ›</span></div>'); });
+  froids.slice(0,8).forEach(function(e){ al.push('<div class="alert" data-act="fiche" data-id="'+esc(e.id)+'"><span class="feu Rouge"><i></i></span><div style="flex:1;min-width:0"><b>'+esc(e.nom)+'</b><div class="small muted">'+esc(APP().court(e.conseiller))+' · dernier contact '+(M[e.id]?fd(M[e.id]):"jamais")+'</div></div><span class="small muted">Fiche ›</span></div>'); });
+  if(!al.length) h+='<p class="empty">Aucune alerte : l\'équipe est à jour.</p>'; else h+=al.join("");
+  if(late.length>8) h+='<p class="small muted">… et '+(late.length-8)+' autre(s) tâche(s) en retard.</p>';
+  if(froids.length>8) h+='<p class="small muted">… et '+(froids.length-8)+' autre(s) entreprise(s) sans contact.</p>';
+  return h+'</section>';
+}
+
+/* ================= Écran : Accueil / caisse ================= */
+function vCaisse(){
+  var c=C.caisse, me=ME().email, voirTous=c.tous && (isMgr() || role()==="lecteur");
+  var R=REAL.filter(function(r){ return r.date===c.date && num(r.montant)>0 && (voirTous || r.auteur===me); }).map(function(r){ return {h:r.creeLe, nat:r.type, ent:r.entrepriseNom, mode:r.modePaiement, recu:r.recu, mt:num(r.montant), a:r.auteur}; });
+  var A=ADH.filter(function(x){ return x.date===c.date && x.statut!=="Annulée" && (voirTous || x.auteur===me); }).map(function(x){ return {h:x.creeLe, nat:"Carte · "+(x.nature||""), ent:x.entrepriseNom, mode:x.modePaiement, recu:x.recu, mt:num(x.montant), a:x.auteur}; });
+  var L=R.concat(A).sort(function(a,b){ return (a.h||"")<(b.h||"")?-1:1; }), tot=L.reduce(function(s2,x){ return s2+x.mt; },0), parMode={};
+  L.forEach(function(x){ var m=x.mode||"Non précisé"; parMode[m]=(parMode[m]||0)+x.mt; });
+  var vis=REAL.filter(function(r){ return r.date===c.date && r.axe==="A1" && (voirTous || r.auteur===me); }).length;
+  var h='<div class="grid g2"><button class="btn primary" style="padding:18px" data-act="c_qvisit">+ Enregistrer un visiteur</button><button class="btn primary" style="padding:18px" data-act="c_qcarte" data-r="caisse">+ Vendre ou renouveler une carte</button></div>';
+  h+='<section class="card"><div class="row between"><h2>Arrêté de caisse</h2><div class="row"><input type="date" id="c_cdate" value="'+esc(c.date)+'" max="'+TODAY+'" style="width:auto">'+
+    ((isMgr()||role()==="lecteur")?'<select id="c_ctous" style="width:auto"><option value="1"'+(c.tous?" selected":"")+'>Toute l\'équipe</option><option value="0"'+(!c.tous?" selected":"")+'>Mes encaissements</option></select>':'')+
+    '<button class="btn sm ghost" data-act="c_cprint">Imprimer</button></div></div>';
+  h+='<div class="grid g3">'+kpiC(ent(tot),"FCFA encaissés le "+fd(c.date))+kpiC(L.length,"encaissement(s)")+kpiC(vis,"visiteur(s) et entretien(s) à l'accueil")+'</div>';
+  if(Object.keys(parMode).length) h+='<div class="row">'+Object.keys(parMode).map(function(m){ return '<span class="tag">'+esc(m)+' : '+ent(parMode[m])+' FCFA</span>'; }).join("")+'</div>';
+  if(!L.length) h+='<p class="empty">Aucun encaissement ce jour-là.</p>';
+  else h+='<div class="tablewrap"><table><thead><tr><th>Heure</th><th>Nature</th><th>Entreprise</th><th class="hide-sm">Mode</th><th class="hide-sm">Reçu</th><th class="num">Montant</th>'+(voirTous?'<th class="hide-sm">Par</th>':'')+'</tr></thead><tbody>'+
+    L.map(function(x){ return '<tr><td>'+esc(heure(x.h))+'</td><td>'+esc(x.nat)+'</td><td>'+esc(x.ent||"—")+'</td><td class="hide-sm">'+esc(x.mode||"—")+'</td><td class="hide-sm">'+esc(x.recu||"—")+'</td><td class="num"><b>'+ent(x.mt)+'</b></td>'+(voirTous?'<td class="hide-sm">'+esc(APP().court(x.a))+'</td>':'')+'</tr>'; }).join("")+
+    '<tr><td colspan="5"><b>Total</b></td><td class="num"><b>'+ent(tot)+'</b></td>'+(voirTous?'<td class="hide-sm"></td>':'')+'</tr></tbody></table></div>';
+  h+='</section>';
+  C._caisse={L:L, tot:tot, parMode:parMode, vis:vis, tous:voirTous};
+  return h;
+}
+function heure(iso){ if(!iso) return "—"; var d=new Date(iso); return isNaN(d) ? "—" : String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+function caissePrint(){
+  var k=C._caisse; if(!k) return;
+  var h='<div class="report"><p class="muted">CADE / CCIAK · Yokkute PME</p><h1>Arrêté de caisse du '+fd(C.caisse.date)+'</h1><p>'+(k.tous?"Toute l'équipe":"Encaissements de "+esc(APP().court(ME().email)))+' · édité le '+fd(TODAY)+'</p>'+
+    '<table><thead><tr><th>Heure</th><th>Nature</th><th>Entreprise</th><th>Mode</th><th>Reçu</th><th>Montant (FCFA)</th><th>Par</th></tr></thead><tbody>'+
+    k.L.map(function(x){ return '<tr><td>'+esc(heure(x.h))+'</td><td>'+esc(x.nat)+'</td><td>'+esc(x.ent||"")+'</td><td>'+esc(x.mode||"")+'</td><td>'+esc(x.recu||"")+'</td><td style="text-align:right">'+ent(x.mt)+'</td><td>'+esc(APP().court(x.a))+'</td></tr>'; }).join("")+
+    '<tr><td colspan="5"><b>Total</b></td><td style="text-align:right"><b>'+ent(k.tot)+'</b></td><td></td></tr></tbody></table>'+
+    '<h2>Par mode de paiement</h2><table><tbody>'+Object.keys(k.parMode).map(function(m){ return '<tr><td>'+esc(m)+'</td><td style="text-align:right">'+ent(k.parMode[m])+'</td></tr>'; }).join("")+'</tbody></table>'+
+    '<div class="sign"><div>Établi par</div><div>Vérifié par</div><div>Visa du responsable</div></div></div>';
+  APP().printHTML(h);
+}
+
 /* ================= Point d'entrée ================= */
 function view(){
+  if(!C.tab0){ C.tab0=true; C.tab=isAccueil()?"caisse":(role()==="conseiller"?"moi":"tableau"); C.caisse.tous=isMgr() || role()==="lecteur"; }
+  if(!tabList().some(function(x){ return x[0]===C.tab; })) C.tab="tableau";
   var h='<div><p class="eyebrow">Fiche de poste du CADE · planification et suivi</p><h1>Activités CADE</h1></div>'+tabs();
+  if(C.tab==="moi") return h+rulesWarn()+vMoi();
+  if(C.tab==="caisse") return h+rulesWarn()+vCaisse();
+  if(C.tab==="equipe") return h+rulesWarn()+vEquipe();
   if(C.tab==="journal") return h+vJournal();
   if(C.tab==="cartes") return h+vCartes();
   if(C.tab==="plan") return h+vPlan();
@@ -430,7 +580,15 @@ function click(t, a){
   var id=t.getAttribute("data-id");
   if(a==="c_tab"){ C.tab=t.getAttribute("data-v"); C.form=null; C.adh=null; C.planEdit=null; C.ntype=null; C.annuler=null; APP().render(); window.scrollTo(0,0); return; }
   if(a==="c_fnew"){ C.form=nouvelleReal(); APP().render(); return; }
-  if(a==="c_fcancel"){ C.form=null; APP().render(); return; }
+  if(a==="c_qreal"){ C.form=nouvelleReal(); C.form.retour=t.getAttribute("data-r"); C.tab="journal"; APP().go("cade"); return; }
+  if(a==="c_qvisit"){ C.form=nouvelleReal(); C.form.axe="A1"; C.form.type="Accueil d'un visiteur"; C.form.retour="caisse"; C.tab="journal"; APP().go("cade"); return; }
+  if(a==="c_qcarte"){ C.adh=nouvelleAdh(); C.adh.retour=t.getAttribute("data-r"); C.tab="cartes"; APP().go("cade"); return; }
+  if(a==="c_cprint"){ caissePrint(); return; }
+  if(a==="c_fromtask"){ var tk=APP().TACHES.filter(function(x){ return x.id===id; })[0]; if(!tk) return;
+    var f=nouvelleReal(); if(tk.axe && axe(tk.axe) && (!isAccueil() || tk.axe==="A1")){ f.axe=tk.axe; f.type=tk.typeAction && typesOf(tk.axe).some(function(z){ return z.t===tk.typeAction; }) ? tk.typeAction : typesOf(tk.axe)[0].t; }
+    if(tk.entrepriseId){ var e=APP().byId(tk.entrepriseId); if(e) f.entTxt=e.nom+" · "+e.id; }
+    f.obs=tk.commentaire||""; f.taskId=tk.id; f.tacheTitre=tk.titre; f.retour=APP().S_view()==="taches"?"taches":C.tab; C.form=f; C.tab="journal"; APP().go("cade"); return; }
+  if(a==="c_fcancel"){ var rt=C.form && C.form.retour; C.form=null; if(rt==="taches"){ APP().go("taches"); return; } if(rt) C.tab=rt; APP().render(); return; }
   if(a==="c_fsave"){ saveForm(); return; }
   if(a==="c_fedit"){ var r=REAL.filter(function(x){ return x.id===id; })[0]; if(!r) return;
     C.form={id:r.id, date:r.date, axe:r.axe, type:r.type, entTxt:r.entrepriseId?(r.entrepriseNom+" · "+r.entrepriseId):(r.entrepriseNom||""), participants:r.participants==null?"":r.participants, femmes:r.femmes==null?"":r.femmes,
@@ -440,7 +598,7 @@ function click(t, a){
   if(a==="c_xlsj"){ xlsJournal(); return; }
   if(a==="c_xlsa"){ xlsAdh(); return; }
   if(a==="c_anew"){ C.adh=nouvelleAdh(); APP().render(); return; }
-  if(a==="c_acancel"){ C.adh=null; APP().render(); return; }
+  if(a==="c_acancel"){ var ra=C.adh && C.adh.retour; C.adh=null; if(ra) C.tab=ra; APP().render(); return; }
   if(a==="c_asave"){ saveAdh(); return; }
   if(a==="c_aedit"){ var x=ADH.filter(function(z){ return z.id===id; })[0]; if(!x) return;
     C.adh={id:x.id, date:x.date, entTxt:x.entrepriseId?(x.entrepriseNom+" · "+x.entrepriseId):"", nom:x.entrepriseId?"":x.entrepriseNom, matricule:x.entrepriseId?"":x.matricule, categorie:x.categorie, montant:x.montant, nature:x.nature, echeance:x.echeance, mode:x.modePaiement||"Espèces", recu:x.recu||""};
@@ -474,6 +632,8 @@ function change(t){
   if(id==="c_pan"||id==="c_cyear"){ C.per.annee=Number(t.value); APP().render(); return true; }
   if(id==="c_plyear"){ C.planAnnee=Number(t.value); C.planEdit=null; APP().render(); return true; }
   if(id==="c_jaxe"){ C.jf.axe=t.value; APP().render(); return true; }
+  if(id==="c_cdate"){ if(t.value) C.caisse.date=t.value; APP().render(); return true; }
+  if(id==="c_ctous"){ C.caisse.tous=t.value==="1"; APP().render(); return true; }
   if(id==="c_jqui"){ C.jf.qui=t.value; APP().render(); return true; }
   var f=C.form;
   if(f && id==="cf_axe"){ f.axe=t.value; f.type=typesOf(f.axe)[0].t; APP().render(); return true; }
@@ -510,5 +670,5 @@ function input(t){
   return false;
 }
 
-window.YK_CADE = {view:view, click:click, change:change, input:input, editing:editing, AXES:AXES};
+window.YK_CADE = {view:view, click:click, change:change, input:input, editing:editing, AXES:AXES, typesOf:typesOf};
 })();

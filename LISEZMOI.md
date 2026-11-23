@@ -57,6 +57,13 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 
 **Important** : les règles `firestore.rules` ont changé (collections `realisations`, `adhesions`, `cade_param`). Recopiez-les dans Firebase › Firestore Database › Règles › Publier, sinon le module affiche « Accès refusé par la base ».
 
+## Pilotage de l'équipe (version 1.3, phase 2)
+- Nouveau rôle **Responsable gestion portefeuille des entreprises (programme Yokkute)** (Équipe et partage) : il est aussi conseiller (diagnostics, PDI, visites) et peut s'attribuer des tâches ; en plus, il pilote l'équipe. Il voit et attribue toutes les tâches, réattribue les entreprises, fixe le plan annuel, corrige les saisies et annule les ventes de cartes.
+- **Tâches** : chaque tâche peut être rattachée à un axe (A1 à A9), avoir une priorité (haute, normale, basse) et se répéter chaque semaine ou chaque mois. La suivante se crée seule quand la précédente est terminée. Un conseiller peut créer ses propres tâches. Le bouton « Terminer et saisir l'activité réalisée » ouvre le journal déjà rempli et ferme la tâche. Vue **Semaine** : une ligne par membre, une colonne par jour.
+- **Activités CADE** : trois nouveaux onglets. **Mon espace** (mes tâches en retard, du jour et de la semaine, mes entreprises triées par dernier contact, mes résultats du mois). **Pilotage de l'équipe** (charge et résultats par membre, alertes : tâches en retard, entreprises suivies sans contact depuis 60 jours, cartes à relancer, plan non enregistré). **Accueil / caisse** (visiteur ou carte en un clic, arrêté de caisse du jour par mode de paiement, imprimable).
+- Les années proposées vont de 2026 à l'année prochaine, sans limite : les données des années passées restent consultables.
+- **Important** : les règles `firestore.rules` ont encore changé. Recopiez-les dans Firebase › Firestore Database › Règles › Publier.
+
 ## Mettre à jour l'application
 Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 
