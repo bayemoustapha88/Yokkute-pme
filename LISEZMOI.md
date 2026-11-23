@@ -75,6 +75,15 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - **Rapports téléchargeables en PDF, en Word (.docx) et en Excel** : Rapports d'activités (mensuel, trimestriel, semestriel, annuel), rapport de la période dans Activités CADE (Tableau de bord ou Pilotage) et arrêté de caisse. Les fichiers sont produits sur l'appareil, sans connexion nécessaire.
 - Nouveaux fichiers : `export.js`, `jspdf.umd.min.js` et `jspdf.plugin.autotable.min.js` (bibliothèque jsPDF, licence MIT). Les règles Firestore ne changent pas.
 
+## Recettes de la Plateforme électronique, PE (version 1.6)
+
+- Nouvel onglet **Recettes PE** dans « Activités CADE » : chaque prestation numérique encaissée (étiquettes, logo, factures, supports de communication, cartes de visite, visuels pour réseaux sociaux…) est enregistrée avec le client, la quantité, le montant, le mode de paiement, le reçu et l'état de la commande (en cours ou livrée).
+- Les recettes PE s'ajoutent aux cartes d'adhésion et aux prestations du CADE dans le **total des recettes propres** : tableau de bord (4e objectif financier), Mon espace, Pilotage de l'équipe, arrêté de caisse et rapports PDF / Word / Excel.
+- Le **plan annuel** contient un catalogue PE modifiable (prestations, tarif moyen, nombre de commandes visées). Valeurs d'exemple : 3 150 000 FCFA par an.
+- Nouveau rôle **Agent Plateforme électronique (PE)** : il saisit les recettes PE et voit les tableaux de bord. L'accueil / caisse, les conseillers, le responsable portefeuille et le propriétaire peuvent aussi encaisser une recette PE.
+- Comme les cartes, une recette PE ne se supprime pas : le propriétaire ou le responsable portefeuille l'annule avec un motif.
+- **Règles Firestore à republier** (nouvelle collection `recettes_pe`).
+
 ## Mettre à jour l'application
 Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 

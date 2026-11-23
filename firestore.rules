@@ -13,6 +13,8 @@ service cloud.firestore {
     function isMgr() { return isOwner() || isChef(); }
     function isAccueil() { return isMember() && member().role == 'accueil'; }
     function isStaff() { return isOwner() || isConseiller() || isAccueil(); }
+    // Version 1.6 : agent de la Plateforme électronique (prestations numériques : étiquettes, logos, factures, supports…).
+    function isPE() { return isMember() && member().role == 'pe'; }
     function canRead() { return isOwner() || isMember(); }
     // Saisie modifiable par son auteur pendant 7 jours (604 800 000 ms), date de création non modifiable.
     function auteurRecent() { return resource.data.auteur == email() && request.resource.data.auteur == email()
@@ -62,7 +64,7 @@ service cloud.firestore {
     }
     match /journal/{id} {
       allow read: if canRead();
-      allow create: if isStaff() && request.resource.data.auteur == email();
+      allow create: if (isStaff() || isPE()) && request.resource.data.auteur == email();
     }
     // ---- Activités CADE (version 1.2) ----
     // Journal des activités : l'accueil ne saisit que l'axe A1.
@@ -79,6 +81,17 @@ service cloud.firestore {
       allow create: if isStaff() && request.resource.data.auteur == email() && request.resource.data.creeMs is number
                     && request.resource.data.statut == 'Valide';
       allow update: if isMgr() || (isStaff() && auteurRecent() && request.resource.data.statut == resource.data.statut);
+      allow delete: if false;
+    }
+    // Recettes de la Plateforme électronique (PE) · version 1.6 : jamais supprimées ; annulées par le propriétaire ou le responsable portefeuille.
+    // Toute personne qui encaisse peut marquer une commande « Livrée » ; l'auteur corrige sa saisie pendant 7 jours.
+    match /recettes_pe/{id} {
+      allow read: if canRead();
+      allow create: if (isStaff() || isPE()) && request.resource.data.auteur == email() && request.resource.data.creeMs is number
+                    && request.resource.data.statut == 'Valide';
+      allow update: if isMgr()
+                    || ((isStaff() || isPE()) && auteurRecent() && request.resource.data.statut == resource.data.statut)
+                    || ((isStaff() || isPE()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statutCommande','livreLe','majLe','majPar','id']));
       allow delete: if false;
     }
     // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire ou le responsable portefeuille.
