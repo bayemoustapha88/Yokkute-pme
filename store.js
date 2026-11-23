@@ -7,6 +7,10 @@
   var DB = { mode:"local", user:null, pending:false, online:navigator.onLine };
   var CHUNK = 700000;
   var listeners = {}, userCbs = [], statusCbs = [];
+  /* Version 1.5 : on garde le dernier état connu, pour le rejouer à un écran qui s'abonne après coup (chargement lent d'un gros fichier). */
+  var lastUser = null, lastDocs = {};
+  function emitUser(u, m){ lastUser=[u, m]; userCbs.forEach(function(f){ f(u, m); }); }
+  function emitDocs(col, docs){ lastDocs[col]=docs; (listeners[col]||[]).forEach(function(f){ f(docs); }); }
   function emitStatus(){ statusCbs.forEach(function(f){ try{ f(DB); }catch(e){ console.error(e); } }); }
   window.addEventListener("online", function(){ DB.online=true; emitStatus(); });
   window.addEventListener("offline", function(){ DB.online=false; emitStatus(); });
@@ -25,13 +29,13 @@
     auth.onAuthStateChanged(function(u){
       unsub.forEach(function(f){ f(); }); unsub=[];
       DB.user = u ? {email:(u.email||"").toLowerCase(), nom:u.displayName||u.email, photo:u.photoURL||""} : null;
-      if(!u){ userCbs.forEach(function(f){ f(null, null); }); return; }
-      if(DB.user.email===String(CFG.ownerEmail).toLowerCase()){ userCbs.forEach(function(f){ f(DB.user, {role:"proprietaire", actif:true}); }); attach(); return; }
+      if(!u){ emitUser(null, null); return; }
+      if(DB.user.email===String(CFG.ownerEmail).toLowerCase()){ emitUser(DB.user, {role:"proprietaire", actif:true}); attach(); return; }
       fs.collection("membres").doc(DB.user.email).get().then(function(d){
         var m = d.exists ? d.data() : null;
-        userCbs.forEach(function(f){ f(DB.user, m); });
+        emitUser(DB.user, m);
         if(m && m.actif) attach();
-      }).catch(function(e){ console.warn(e); userCbs.forEach(function(f){ f(DB.user, {erreur:e && e.code}); }); });
+      }).catch(function(e){ console.warn(e); emitUser(DB.user, {erreur:e && e.code}); });
     });
     function attach(){
       COLS.forEach(function(col){
@@ -41,7 +45,7 @@
           DB.pending = Object.keys(pendingByCol).some(function(k){ return pendingByCol[k]; });
           emitStatus();
           var docs = snap.docs.map(function(d){ var x=d.data(); x._id=d.id; return x; });
-          (listeners[col]||[]).forEach(function(f){ f(docs); });
+          emitDocs(col, docs);
         }, function(err){
           console.error(col, err);
           (listeners["_error"]||[]).forEach(function(f){ f(col, err); });
@@ -80,13 +84,13 @@
     var KEY = "yokkute_local_";
     function read(col){ try{ return JSON.parse(localStorage.getItem(KEY+col)||"{}"); }catch(e){ return {}; } }
     function write(col, obj){ try{ localStorage.setItem(KEY+col, JSON.stringify(obj)); }catch(e){ console.warn("Stockage local plein ou indisponible", e); } }
-    function fire(col){ var o=read(col); var docs=Object.keys(o).map(function(k){ var x=o[k]; x._id=k; return x; }); (listeners[col]||[]).forEach(function(f){ f(docs); }); }
+    function fire(col){ var o=read(col); var docs=Object.keys(o).map(function(k){ var x=o[k]; x._id=k; return x; }); emitDocs(col, docs); }
     var asParam = (location.search.match(/[?&]as=([^&]+)/)||[])[1];
     DB.user = {email: decodeURIComponent(asParam || CFG.ownerEmail).toLowerCase(), nom: "Mode local", photo:""};
     setTimeout(function(){
       var mem = read("membres")[DB.user.email];
       var m = DB.user.email===String(CFG.ownerEmail).toLowerCase() ? {role:"proprietaire", actif:true} : (mem||null);
-      userCbs.forEach(function(f){ f(DB.user, m); }); COLS.forEach(fire); emitStatus(); }, 0);
+      emitUser(DB.user, m); COLS.forEach(fire); emitStatus(); }, 0);
     window.addEventListener("storage", function(ev){ if(ev.key && ev.key.indexOf(KEY)===0) fire(ev.key.slice(KEY.length)); });
     DB.signIn = function(){ return Promise.resolve(); };
     DB.signOut = function(){ toastGlobal("En mode local, il n'y a pas de compte à déconnecter."); return Promise.resolve(); };
@@ -100,8 +104,8 @@
     DB.getAll = function(col){ var o=read(col); return Promise.resolve(Object.keys(o).map(function(k){ var x=o[k]; x._id=k; return x; })); };
   }
   function toastGlobal(m){ if(window.ykToast) window.ykToast(m); }
-  DB.listen = function(col, f){ (listeners[col]=listeners[col]||[]).push(f); };
-  DB.onUser = function(f){ userCbs.push(f); };
+  DB.listen = function(col, f){ (listeners[col]=listeners[col]||[]).push(f); if(lastDocs[col]) setTimeout(function(){ f(lastDocs[col]); }, 0); };
+  DB.onUser = function(f){ userCbs.push(f); if(lastUser){ var a=lastUser; setTimeout(function(){ f(a[0], a[1]); }, 0); } };
   DB.onStatus = function(f){ statusCbs.push(f); };
   window.YK_DB = DB;
 })();

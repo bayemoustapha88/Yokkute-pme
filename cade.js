@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.3 : phases 1 et 2).
+/* Yokkute PME — module « Activités CADE » (version 1.5 : phases 1 et 2, exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, cade_param. */
@@ -90,7 +90,8 @@ function isMgr(){ return role()==="proprietaire" || role()==="chef"; }
 function isAccueil(){ return role()==="accueil"; }
 function isConsLike(){ return role()==="proprietaire" || role()==="chef" || role()==="conseiller"; }
 function canSaisir(){ return isConsLike() || isAccueil(); }
-function canVoirEquipe(){ return isMgr() || role()==="lecteur"; }
+/* Version 1.5 : tableaux de bord et pilotage visibles par toute l'équipe, pour un suivi participatif. */
+function canVoirEquipe(){ return !!ME(); }
 function recent(x){ return x.creeMs && (Date.now()-x.creeMs) < SEPT_JOURS; }
 function canEditDoc(x){ return isMgr() || (canSaisir() && x.auteur===ME().email && recent(x)); }
 function axesSaisissables(){ return isAccueil() ? AXES.filter(function(a){ return a.code==="A1"; }) : AXES; }
@@ -197,7 +198,7 @@ function rulesWarn(){
 
 /* ================= Écran : tableau de bord ================= */
 function vTableau(){
-  var per=C.per, K=calc(per), P=K.P, Pl=plan(per.annee), part=P.part, ec=ecoule(P), h=perSelect();
+  var per=C.per, K=calc(per), P=K.P, Pl=plan(per.annee), part=P.part, ec=ecoule(P), h=perSelect()+barreExport("Télécharger le rapport de la période");
   if(!Pl.existe) h+='<p class="ro-banner">Les cibles affichées sont des <b>valeurs d\'exemple</b>. Le propriétaire ou le responsable portefeuille les remplace dans « Plan annuel et référentiel ».</p>';
   function fin(lib, real, cibleAn, sous){
     var cib=cibleAn*part, t=pct(real,cib), proj=ec>0 && ec<1 ? real/ec : null;
@@ -501,7 +502,7 @@ function kpiC(v,l,col){ return '<div class="card kpi"><span class="v num"'+(col?
 /* ================= Écran : Pilotage de l'équipe (responsable portefeuille, propriétaire, lecteur) ================= */
 function vEquipe(){
   var K=calc(C.per), P=K.P, inP=function(d){ d=String(d||"").slice(0,10); return d && d>=P.debut && d<=P.fin; }, T=APP().TACHES, M=contacts(), E=APP().ENT;
-  var h=perSelect();
+  var h=perSelect()+barreExport("Télécharger le rapport de la période");
   var gens=APP().conseillers().concat(APP().MEMBRES.filter(function(m){ return m.actif && m.role==="accueil"; }));
   h+='<section class="card"><h2>Charge et résultats de l\'équipe · '+esc(P.label)+'</h2><div class="tablewrap"><table><thead><tr><th>Membre</th><th class="num">Tâches ouvertes</th><th class="num">En retard</th><th class="num">Terminées</th><th class="num">Activités saisies</th><th class="num hide-sm">Encaissé (FCFA)</th><th class="num hide-sm">Entreprises</th><th class="num hide-sm">Sans contact &gt; 60 j</th></tr></thead><tbody>';
   gens.forEach(function(g){ var em=g.email, to=T.filter(function(t){ return t.assigneA===em && t.statut!=="Fait" && t.statut!=="Annulée"; }), lr=to.filter(APP().enRetard).length,
@@ -538,7 +539,7 @@ function vCaisse(){
   var h='<div class="grid g2"><button class="btn primary" style="padding:18px" data-act="c_qvisit">+ Enregistrer un visiteur</button><button class="btn primary" style="padding:18px" data-act="c_qcarte" data-r="caisse">+ Vendre ou renouveler une carte</button></div>';
   h+='<section class="card"><div class="row between"><h2>Arrêté de caisse</h2><div class="row"><input type="date" id="c_cdate" value="'+esc(c.date)+'" max="'+TODAY+'" style="width:auto">'+
     ((isMgr()||role()==="lecteur")?'<select id="c_ctous" style="width:auto"><option value="1"'+(c.tous?" selected":"")+'>Toute l\'équipe</option><option value="0"'+(!c.tous?" selected":"")+'>Mes encaissements</option></select>':'')+
-    '<button class="btn sm ghost" data-act="c_cprint">Imprimer</button></div></div>';
+    '<button class="btn sm ghost" data-act="c_cprint">Imprimer</button><button class="btn sm" data-act="c_cpdf">PDF</button><button class="btn sm" data-act="c_cdoc">Word</button></div></div>';
   h+='<div class="grid g3">'+kpiC(ent(tot),"FCFA encaissés le "+fd(c.date))+kpiC(L.length,"encaissement(s)")+kpiC(vis,"visiteur(s) et entretien(s) à l'accueil")+'</div>';
   if(Object.keys(parMode).length) h+='<div class="row">'+Object.keys(parMode).map(function(m){ return '<span class="tag">'+esc(m)+' : '+ent(parMode[m])+' FCFA</span>'; }).join("")+'</div>';
   if(!L.length) h+='<p class="empty">Aucun encaissement ce jour-là.</p>';
@@ -559,6 +560,72 @@ function caissePrint(){
     '<h2>Par mode de paiement</h2><table><tbody>'+Object.keys(k.parMode).map(function(m){ return '<tr><td>'+esc(m)+'</td><td style="text-align:right">'+ent(k.parMode[m])+'</td></tr>'; }).join("")+'</tbody></table>'+
     '<div class="sign"><div>Établi par</div><div>Vérifié par</div><div>Visa du responsable gestion portefeuille des entreprises (programme Yokkute)</div></div></div>';
   APP().printHTML(h);
+}
+
+/* ================= Rapport CADE (PDF, Word, Excel) · version 1.5 ================= */
+function barreExport(lib){
+  return '<div class="row noexport" style="justify-content:flex-end"><span class="small muted">'+esc(lib)+'</span><button class="btn sm primary" data-act="c_rpdf">PDF</button><button class="btn sm" data-act="c_rdoc">Word</button><button class="btn sm" data-act="c_rxls">Excel</button></div>';
+}
+function donneesCade(){
+  var per=C.per, K=calc(per), P=K.P, Pl=plan(per.annee), part=P.part, T=APP().TACHES, M=contacts(), E=APP().ENT;
+  var inP=function(d){ d=String(d||"").slice(0,10); return d && d>=P.debut && d<=P.fin; };
+  var fin=[["Recettes des cartes d'adhésion", K.cartes, cibleCartes(Pl)*part],["Recettes des prestations du CADE", K.presta, Pl.prestations*part],["Financements obtenus par les entreprises", K.financ, Pl.financements*part]]
+    .map(function(x){ var t=pct(x[1],x[2]); return [x[0], ent(x[1]), ent(x[2]), t==null?"—":t+" %"]; });
+  var ind=INDIC.map(function(i){ var r=K.ind[i.id], c=Math.round(Pl.cibles[i.id]*part*10)/10, t=pct(r,c); return [i.axe, i.lib+(i.src!=="real"?" (auto)":""), ent(r), nf(c), t==null?"—":t+" %"]; });
+  var gens=APP().conseillers().concat(APP().MEMBRES.filter(function(m){ return m.actif && m.role==="accueil"; }));
+  var eq=gens.map(function(g){ var em=g.email, to=T.filter(function(t){ return t.assigneA===em && t.statut!=="Fait" && t.statut!=="Annulée"; });
+    var ra=K.R.filter(function(r){ return r.auteur===em; }), enc=ra.reduce(function(s2,r){ return s2+num(r.montant); },0)+ADH.filter(function(x){ return x.auteur===em && x.statut!=="Annulée" && inP(x.date); }).reduce(function(s2,x){ return s2+num(x.montant); },0);
+    var es=E.filter(function(e){ return e.conseiller===em; }), froid=es.filter(function(e){ var j=sansContact(e,M); return e.pdiValide && (j==null || j>60); }).length;
+    return [APP().membreNom(em), String(to.length), String(to.filter(APP().enRetard).length), String(T.filter(function(t){ return t.assigneA===em && t.statut==="Fait" && inP(t.dateFait); }).length), String(ra.length), ent(enc), String(es.length), String(froid)]; });
+  var parAxe=AXES.map(function(a){ var L=K.R.filter(function(r){ return r.axe===a.code; }); return [a.code, a.lib, String(L.length), ent(L.reduce(function(s2,r){ return s2+num(r.montant); },0))]; });
+  var jr=K.R.slice().sort(function(a,b){ return a.date<b.date?-1:1; }).map(function(r){ return [fd(r.date), r.axe, r.type, r.entrepriseNom||"", r.participants!=null?String(r.participants):"", r.montant?ent(r.montant):"", APP().membreNom(r.auteur)]; });
+  var ca=ADH.filter(function(x){ return inP(x.date); }).sort(function(a,b){ return a.date<b.date?-1:1; }).map(function(x){ return [fd(x.date), x.entrepriseNom, x.categorieLib||x.categorie, x.nature, ent(num(x.montant)), x.statut]; });
+  var rel=aRelancer().map(function(x){ return [fd(x.echeance), x.entrepriseNom, x.matricule||"", x.categorieLib||x.categorie]; });
+  return {P:P, Pl:Pl, K:K, fin:fin, ind:ind, eq:eq, parAxe:parAxe, jr:jr, ca:ca, rel:rel};
+}
+function tab(head, rows){ return '<table><thead><tr>'+head.map(function(h){ return '<th>'+esc(h)+'</th>'; }).join("")+'</tr></thead><tbody>'+(rows.length?rows.map(function(r){ return '<tr>'+r.map(function(c){ return '<td>'+esc(c)+'</td>'; }).join("")+'</tr>'; }).join(""):'<tr><td colspan="'+head.length+'">Aucune donnée sur la période.</td></tr>')+'</tbody></table>'; }
+function rapportCadeHTML(D){
+  var P=D.P, K=D.K;
+  var h='<h1>Rapport d\'activités du CADE · '+esc(P.label)+'</h1><p>Du '+fd(P.debut)+' au '+fd(P.fin)+' · établi le '+fd(TODAY)+' par '+esc(APP().membreNom(ME().email))+'.</p>';
+  h+='<p>Sur la période, l\'équipe a enregistré '+K.R.length+' activité(s) et '+K.cartesNb+' carte(s) d\'adhésion ; les recettes propres (cartes et prestations) atteignent '+ent(K.cartes+K.presta)+' FCFA et les financements obtenus par les entreprises '+ent(K.financ)+' FCFA.</p>';
+  if(!D.Pl.existe) h+='<p class="small">Les cibles sont des valeurs d\'exemple : le plan annuel '+C.per.annee+' n\'est pas encore enregistré.</p>';
+  h+='<h2>Objectifs financiers</h2>'+tab(["Objectif","Réalisé (FCFA)","Cible de la période (FCFA)","Taux"], D.fin);
+  h+='<h2>Prévu et réalisé par axe de la fiche de poste</h2>'+tab(["Axe","Indicateur","Réalisé","Cible","Taux"], D.ind);
+  h+='<p class="small">« (auto) » : compté depuis les diagnostics, PDI et visites enregistrés dans Yokkute.</p>';
+  h+='<h2>Activités et recettes par axe</h2>'+tab(["Axe","Libellé","Activités","Encaissé (FCFA)"], D.parAxe);
+  h+='<h2>Charge et résultats de l\'équipe</h2>'+tab(["Membre","Tâches ouvertes","En retard","Terminées","Activités saisies","Encaissé (FCFA)","Entreprises","Sans contact > 60 j"], D.eq);
+  h+='<h2>Cartes d\'adhésion de la période</h2>'+tab(["Date","Entreprise","Catégorie","Nature","Montant (FCFA)","Statut"], D.ca);
+  h+='<h2>Cartes à relancer</h2>'+tab(["Échéance","Entreprise","Matricule","Catégorie"], D.rel);
+  h+='<h2>Journal des activités de la période</h2>'+tab(["Date","Axe","Type d\'action","Entreprise","Participants","Encaissé","Saisi par"], D.jr);
+  return h;
+}
+function exportCade(kind){
+  var D=donneesCade(), o={title:"Rapport d'activités du CADE · "+D.P.label, file:"Rapport_CADE_"+D.P.debut.slice(0,7)+"_"+C.per.type, org:APP().CFG.nomStructure+" · "+APP().CFG.nomApplication, pied:APP().CFG.nomStructure+" · Activités CADE · "+D.P.label};
+  if(kind==="xls"){
+    if(!window.XLSX){ toast("Export Excel indisponible sur cet appareil."); return; }
+    var wb=XLSX.utils.book_new();
+    function f(nom, head, rows){ XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head].concat(rows)), nom); }
+    f("Objectifs", ["Objectif","Réalisé (FCFA)","Cible période (FCFA)","Taux"], D.fin);
+    f("Par indicateur", ["Axe","Indicateur","Réalisé","Cible","Taux"], D.ind);
+    f("Par axe", ["Axe","Libellé","Activités","Encaissé (FCFA)"], D.parAxe);
+    f("Equipe", ["Membre","Tâches ouvertes","En retard","Terminées","Activités saisies","Encaissé (FCFA)","Entreprises","Sans contact > 60 j"], D.eq);
+    f("Cartes", ["Date","Entreprise","Catégorie","Nature","Montant (FCFA)","Statut"], D.ca);
+    f("A relancer", ["Échéance","Entreprise","Matricule","Catégorie"], D.rel);
+    f("Journal", ["Date","Axe","Type d'action","Entreprise","Participants","Encaissé","Saisi par"], D.jr);
+    XLSX.writeFile(wb, o.file+".xlsx"); toast("Rapport Excel téléchargé."); return;
+  }
+  var html=rapportCadeHTML(D);
+  if(kind==="pdf") window.YKE.pdf(html, o); else window.YKE.word(html, o);
+  toast(kind==="pdf"?"Rapport PDF téléchargé.":"Rapport Word téléchargé.");
+}
+function caisseExport(kind){
+  var k=C._caisse; if(!k) return;
+  var h='<h1>Arrêté de caisse du '+fd(C.caisse.date)+'</h1><p>'+(k.tous?"Toute l'équipe":"Encaissements de "+esc(APP().membreNom(ME().email)))+' · édité le '+fd(TODAY)+'</p>'+
+    tab(["Heure","Nature","Entreprise","Mode","Reçu","Montant (FCFA)","Par"], k.L.map(function(x){ return [heure(x.h), x.nat, x.ent||"", x.mode||"", x.recu||"", ent(x.mt), APP().membreNom(x.a)]; }).concat([["","Total","","","",ent(k.tot),""]]))+
+    '<h2>Par mode de paiement</h2>'+tab(["Mode","Montant (FCFA)"], Object.keys(k.parMode).map(function(m){ return [m, ent(k.parMode[m])]; }))+
+    '<p>Établi par : ............................ · Vérifié par : ............................ · Visa du responsable : ............................</p>';
+  var o={title:"Arrêté de caisse du "+fd(C.caisse.date), file:"Arrete_caisse_"+C.caisse.date, org:APP().CFG.nomStructure+" · "+APP().CFG.nomApplication, pied:APP().CFG.nomStructure+" · Arrêté de caisse"};
+  if(kind==="pdf") window.YKE.pdf(h, o); else window.YKE.word(h, o);
 }
 
 /* ================= Point d'entrée ================= */
@@ -584,6 +651,11 @@ function click(t, a){
   if(a==="c_qvisit"){ C.form=nouvelleReal(); C.form.axe="A1"; C.form.type="Accueil d'un visiteur"; C.form.retour="caisse"; C.tab="journal"; APP().go("cade"); return; }
   if(a==="c_qcarte"){ C.adh=nouvelleAdh(); C.adh.retour=t.getAttribute("data-r"); C.tab="cartes"; APP().go("cade"); return; }
   if(a==="c_cprint"){ caissePrint(); return; }
+  if(a==="c_cpdf"){ caisseExport("pdf"); return; }
+  if(a==="c_cdoc"){ caisseExport("doc"); return; }
+  if(a==="c_rpdf"){ exportCade("pdf"); return; }
+  if(a==="c_rdoc"){ exportCade("doc"); return; }
+  if(a==="c_rxls"){ exportCade("xls"); return; }
   if(a==="c_fromtask"){ var tk=APP().TACHES.filter(function(x){ return x.id===id; })[0]; if(!tk) return;
     var f=nouvelleReal(); if(tk.axe && axe(tk.axe) && (!isAccueil() || tk.axe==="A1")){ f.axe=tk.axe; f.type=tk.typeAction && typesOf(tk.axe).some(function(z){ return z.t===tk.typeAction; }) ? tk.typeAction : typesOf(tk.axe)[0].t; }
     if(tk.entrepriseId){ var e=APP().byId(tk.entrepriseId); if(e) f.entTxt=e.nom+" · "+e.id; }

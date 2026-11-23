@@ -148,7 +148,7 @@ function vTableau(){
   if(!alerts.length) h+='<p class="empty">Rien d\'urgent pour le moment.</p>';
   alerts.slice(0,10).forEach(function(a){ h+='<div class="alert" data-act="fiche" data-id="'+esc(a[0].id)+'" role="button" tabindex="0"><span class="feu '+a[1]+'"><i></i></span><div style="flex:1;min-width:0"><b>'+esc(a[0].nom)+'</b><div class="small muted">'+a[2]+(isOwner()&&a[0].conseiller!==OWNER?" · "+esc(court(a[0].conseiller)):"")+'</div></div><span class="small muted">Ouvrir ›</span></div>'; });
   h+='</section>';
-  if(isMgr() && MEMBRES.length){
+  if(MEMBRES.length){
     h+='<section class="card"><h2>Charge par conseiller</h2><div class="tablewrap"><table><thead><tr><th>Conseiller</th><th>Entreprises</th><th>Diagnostiquées</th><th>Tâches ouvertes</th><th class="hide-sm">Tâches en retard</th></tr></thead><tbody>';
     conseillers().forEach(function(c){ var l=ENT.filter(function(e){return e.conseiller===c.email;}), tk=TACHES.filter(function(t){return t.assigneA===c.email && t.statut!=="Fait";});
       h+='<tr><td><b>'+esc(cLab(c))+'</b></td><td class="num">'+l.length+'</td><td class="num">'+l.filter(function(e){return e.notes;}).length+'</td><td class="num">'+tk.length+'</td><td class="hide-sm num">'+tk.filter(function(t){return t.echeance&&t.echeance<TODAY;}).length+'</td></tr>'; });
@@ -806,7 +806,7 @@ function rapportHTML(R, impression){
 function vRapports(){
   var r=S.rap, ys=[]; for(var y=Number(TODAY.slice(0,4)); y>=2024; y--) ys.push(y);
   var idxOpts = r.type==="mois" ? MOISN.map(function(m,i){ return [i+1,m]; }) : r.type==="trimestre" ? [[1,"1er trimestre"],[2,"2e trimestre"],[3,"3e trimestre"],[4,"4e trimestre"]] : r.type==="semestre" ? [[1,"1er semestre"],[2,"2e semestre"]] : [];
-  var h='<div class="row between"><div><p class="eyebrow">Accompagnement et suivi</p><h1>Rapports d\'activités</h1></div><div class="row"><button class="btn" data-act="raprint">Imprimer / PDF</button><button class="btn" data-act="rapxls">Exporter en Excel</button></div></div>';
+  var h='<div class="row between"><div><p class="eyebrow">Accompagnement et suivi</p><h1>Rapports d\'activités</h1></div><div class="row"><button class="btn primary" data-act="rappdf">Télécharger en PDF</button><button class="btn" data-act="rapdoc">Télécharger en Word</button><button class="btn" data-act="rapxls">Exporter en Excel</button><button class="btn ghost" data-act="raprint">Imprimer</button></div></div>';
   h+='<div class="card"><div class="filters" style="grid-template-columns:1fr 1fr 1fr"><label class="f">Périodicité<select id="rtype">'+[["mois","Mensuel"],["trimestre","Trimestriel"],["semestre","Semestriel"],["annee","Annuel"]].map(function(o){ return '<option value="'+o[0]+'"'+(r.type===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></label>'+
     (idxOpts.length?'<label class="f">Période<select id="ridx">'+idxOpts.map(function(o){ return '<option value="'+o[0]+'"'+(r.idx===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></label>':'<div></div>')+
     '<label class="f">Année<select id="ran">'+ys.map(function(y){ return '<option'+(r.annee===y?" selected":"")+'>'+y+'</option>'; }).join("")+'</select></label></div></div>';
@@ -871,7 +871,7 @@ function vEquipe(){
   h+='<section class="card"><h2>Exports</h2><div class="grid g3">'+
     '<div class="card" style="background:var(--surface-2)"><b>Export complet (Excel)</b><p class="small muted">Entreprises, diagnostics, PDI, visites, tâches, bibliothèque et équipe, une feuille par type. À faire chaque mois pour l\'archive du CADE.</p><button class="btn sm" data-act="exportall">Télécharger</button></div>'+
     '<div class="card" style="background:var(--surface-2)"><b>Modèle Excel</b><p class="small muted">Les 11 colonnes de l\'export CCIAK suivies des colonnes du CADE, pour enregistrer des entreprises en série.</p><button class="btn sm" data-act="modele">Télécharger</button></div>'+
-    '<div class="card" style="background:var(--surface-2)"><b>Rapport d\'activités</b><p class="small muted">Mensuel, trimestriel, semestriel ou annuel, à imprimer en PDF ou exporter en Excel.</p><button class="btn sm" data-act="go" data-v="rapports">Ouvrir les rapports</button></div></div></section>';
+    '<div class="card" style="background:var(--surface-2)"><b>Rapport d\'activités</b><p class="small muted">Mensuel, trimestriel, semestriel ou annuel, à télécharger en PDF, en Word ou en Excel.</p><button class="btn sm" data-act="go" data-v="rapports">Ouvrir les rapports</button></div></div></section>';
   h+='<section class="card"><h2>Mon compte</h2><p class="small">Connecté avec <b>'+esc(ME.email)+'</b> · rôle : '+String(ROLES[ME.role]||ME.role).toLowerCase()+(DB.mode==="local"?" · <b>mode local</b> (les données restent sur cet appareil ; renseignez js/config.js pour activer la base en ligne)":"")+'.</p><div class="row"><button class="btn" data-act="signout">Se déconnecter</button></div></section>';
   return h;
 }
@@ -997,6 +997,8 @@ document.addEventListener("click", function(ev){
   else if(a==="deltask"){ var dt=t.getAttribute("data-id"); if(S.confirmT!==dt){ S.confirmT=dt; render(); return; } S.confirmT=null; DB.del("taches", dt); toast("Tâche supprimée."); }
   else if(a==="raprint"){ printHTML(rapportHTML(calcRapport(), true)); }
   else if(a==="rapxls"){ YKX.exportRapport(calcRapport()); }
+  else if(a==="rappdf" || a==="rapdoc"){ var RR=calcRapport(), oo={title:"Rapport d'activités · "+RR.P.label, file:"Rapport_"+RR.fichier, org:null, pied:CFG.nomStructure+" · Rapport d'activités · "+RR.P.label};
+    var hh=rapportHTML(RR, true); if(a==="rappdf") YKE.pdf(hh, oo); else YKE.word(hh, oo); toast(a==="rappdf"?"Rapport PDF téléchargé.":"Rapport Word téléchargé."); }
   else if(a==="libnew"){ var dd=Number(t.getAttribute("data-dim")||0); S.edit={id:"new", dim:dd, segs:["A","B"], t:{n:2}, module:DIMS[dd].mods[0], action:"", outil:"", livrable:"", modalite:"Formation collective", partenaire:"CADE", mois:3, unite:"mois", type:"essentiel", nature:"formation", actif:true}; render(); showEditor(); }
   else if(a==="libedit"){ S.edit=JSON.parse(JSON.stringify(libById(t.getAttribute("data-id")))); render(); showEditor(); }
   else if(a==="libdup"){ var o2=libById(t.getAttribute("data-id")), c=JSON.parse(JSON.stringify(o2)); c.id="L"+Date.now().toString(36); c.action=c.action+" (copie)"; c.ordre=(o2.ordre||0)+0.5; DB.save("bibliotheque", c.id, c); toast("Action dupliquée."); }
@@ -1097,7 +1099,7 @@ window.addEventListener("beforeprint", function(){ if(!document.body.classList.c
 
 /* Passerelle vers le module « Activités CADE » (cade.js). */
 window.YK_APP = { get ME(){ return ME; }, get ENT(){ return ENT; }, get MEMBRES(){ return MEMBRES; },
-  get TACHES(){ return TACHES; }, OWNER:OWNER, S_view:function(){ return S.view; }, conseillers:conseillers, isMgr:isMgr, terminerTache:terminerTache, enRetard:enRetard, printHTML:printHTML,
+  get TACHES(){ return TACHES; }, OWNER:OWNER, CFG:CFG, membreNom:membreNom, S_view:function(){ return S.view; }, conseillers:conseillers, isMgr:isMgr, terminerTache:terminerTache, enRetard:enRetard, printHTML:printHTML,
   render:render, refresh:refresh, go:go, journal:journal, court:court, byId:byId, toast:toast };
 if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn(e); });
 render();

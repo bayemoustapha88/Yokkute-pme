@@ -70,6 +70,11 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - Cinq actions MC11 dans la bibliothèque (dimension « Leadership, RH et gouvernance »). Elles ne sont proposées dans le PDI que si la forme juridique de l'entreprise est GIE, coopérative ou association, et passent alors avant les actions individuelles. Elles s'ajoutent automatiquement à la bibliothèque à la première connexion du propriétaire.
 - Le guide du formateur se téléverse dans Masterclasses et outils, avec un nom de fichier contenant « MC11 » et « Guide » (par exemple `MC11_Guide_formateur.pdf`).
 
+## Travail participatif et exports PDF / Word (version 1.5)
+- **Tableaux de bord ouverts à toute l'équipe** : dans Activités CADE, le Tableau de bord et le Pilotage de l'équipe sont visibles par tous les membres (conseillers, responsable portefeuille, accueil, lecteurs). Sur le Tableau de bord principal, le bloc « Charge par conseiller » est aussi visible par tous.
+- **Rapports téléchargeables en PDF, en Word (.docx) et en Excel** : Rapports d'activités (mensuel, trimestriel, semestriel, annuel), rapport de la période dans Activités CADE (Tableau de bord ou Pilotage) et arrêté de caisse. Les fichiers sont produits sur l'appareil, sans connexion nécessaire.
+- Nouveaux fichiers : `export.js`, `jspdf.umd.min.js` et `jspdf.plugin.autotable.min.js` (bibliothèque jsPDF, licence MIT). Les règles Firestore ne changent pas.
+
 ## Mettre à jour l'application
 Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `sw.js` (ex. `yokkute-v1.1.1`) pour que les appareils reprennent la nouvelle version.
 
