@@ -75,6 +75,14 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - **Rapports téléchargeables en PDF, en Word (.docx) et en Excel** : Rapports d'activités (mensuel, trimestriel, semestriel, annuel), rapport de la période dans Activités CADE (Tableau de bord ou Pilotage) et arrêté de caisse. Les fichiers sont produits sur l'appareil, sans connexion nécessaire.
 - Nouveaux fichiers : `export.js`, `jspdf.umd.min.js` et `jspdf.plugin.autotable.min.js` (bibliothèque jsPDF, licence MIT). Les règles Firestore ne changent pas.
 
+## Adhésions gratuites des programmes partenaires (version 1.7.1)
+
+- Les adhésions obtenues par l'enrôlement d'un programme partenaire (Nataal Sine Saloum) sont **gratuites** : elles comptent comme adhérents et comme cartes, mais à 0 FCFA dans les recettes.
+- Elles sont repérées par le **coach** de la liste CCIAK : Yatte Diagne, Sophie Diack et Mohammeth Dany Niouky Niouky. La liste des coachs et le nom du programme se modifient dans le plan annuel (« Autres objectifs »).
+- La règle s'applique aussitôt aux adhésions déjà importées : inutile de réimporter la liste.
+- Dans la base des adhérents, un filtre « Paiement » sépare les adhésions payantes et gratuites.
+- Aucune règle Firestore à republier.
+
 ## Base des adhérents et cohortes du programme (version 1.7)
 
 - Nouvel onglet **Base des adhérents** dans « Activités CADE » : tous les adhérents de la CCIAK, pour le suivi financier des adhésions. On l'alimente en important la liste des adhérents (export CCIAK ou classeur de vérification avec la colonne « Forme juridique »). Un nouvel import **remplace** celui de la même année : on peut réimporter un fichier corrigé sans créer de doublons.

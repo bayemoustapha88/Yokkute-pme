@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
+/* Yokkute PME — module « Activités CADE » (version 1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, adherents (lots importés), recettes_pe, cade_param. */
@@ -64,6 +64,8 @@ var CARTES_DEF = [
 var CARTES_ANCIENNES = "TPE:10000|PME:25000|GE:100000";
 var CAT_LIB = {EI:"Entreprise individuelle / SUARL", GIE:"GIE / Coopérative", SOC:"SARL / SA"};
 var PLACES_DEF = 50;
+/* Version 1.7.1 : adhésions gratuites, offertes par l'enrôlement d'un programme partenaire, repérées par le coach. Modifiable dans le plan annuel. */
+var GRATUITES_DEF = {programme:"Nataal Sine Saloum (NSS)", coachs:["Yatte Diagne","Sophie Diack","Mohammeth Dany Niouky Niouky"]};
 /* Plateforme électronique (PE) : catalogue des prestations numériques, tarifs et cibles annuelles d'exemple (modifiables dans le plan annuel). */
 var PE_DEF = [
  {code:"ETQ", lib:"Étiquettes et emballages", tarif:15000, cible:40},
@@ -93,13 +95,17 @@ function normForme(f){ var k=cle(f).replace(/[^A-Z ]/g," ").trim();
   if(/SARL/.test(k)) return "SARL"; if(k==="SA" || /SOCIETE ANONYME/.test(k)) return "SA"; if(/^EI\b|INDIVIDUEL/.test(k)) return "EI"; return String(f).trim(); }
 function catDeForme(f){ f=normForme(f); return (f==="GIE"||f==="Coopérative") ? "GIE" : (f==="SARL"||f==="SA") ? "SOC" : "EI"; }
 function tarifCat(annee, cat){ var c=plan(annee).cartes.filter(function(x){ return x.code===cat; })[0]; if(c) return num(c.tarif); var d=CARTES_DEF.filter(function(x){ return x.code===cat; })[0]; return d?d.tarif:0; }
+function cleNom(x){ return cle(x).replace(/([A-Z])\1+/g,"$1"); }
+function gratuiteDe(coach, annee){ var k=cleNom(coach); if(!k) return ""; var G=plan(Number(annee)).gratuites||{};
+  return (G.coachs||[]).some(function(c){ var g=cleNom(c); return g && (g===k || k.indexOf(g)===0 || g.indexOf(k)===0); }) ? (G.programme||"Programme partenaire") : ""; }
+function montantLigne(l){ var an=String(l.date).slice(0,4); return gratuiteDe(l.coach, an) ? 0 : tarifCat(Number(an), catDeForme(l.forme)); }
 function lignesImportees(){ var out=[]; LOTS.forEach(function(L){ (L.lignes||[]).forEach(function(l){ out.push(l); }); }); return out; }
 function rebuildAdh(){
   var deja={}; ADHDOCS.forEach(function(x){ if(x.statut!=="Annulée" && x.matricule) deja[x.matricule+"|"+String(x.date).slice(0,4)]=1; });
   var imp=lignesImportees().filter(function(l){ return l.mat && l.date && !deja[l.mat+"|"+String(l.date).slice(0,4)]; }).map(function(l){
     var cat=catDeForme(l.forme), anMat=Number(String(l.mat).slice(2,6));
     return {id:"imp_"+l.mat+"_"+String(l.date).slice(0,4), importe:true, date:l.date, entrepriseId:"", entrepriseNom:l.nom, matricule:l.mat, categorie:cat, categorieLib:CAT_LIB[cat],
-      montant:num(l.montant), nature:(anMat && anMat<Number(String(l.date).slice(0,4))) ? "Renouvellement" : "Nouvelle adhésion", echeance:addDur(l.date,12,"mois"),
+      montant:montantLigne(l), gratuite:gratuiteDe(l.coach, String(l.date).slice(0,4)), nature:(anMat && anMat<Number(String(l.date).slice(0,4))) ? "Renouvellement" : "Nouvelle adhésion", echeance:addDur(l.date,12,"mois"),
       modePaiement:"", recu:"", statut:"Valide", auteur:"", telephone:l.tel||"", forme:l.forme||"", commune:l.commune||"", coach:l.coach||""}; });
   ADH=ADHDOCS.concat(imp);
 }
@@ -107,9 +113,9 @@ function rebuildAdh(){
 function baseRows(annee){
   var rows=[], vu={};
   lignesImportees().forEach(function(l){ if(!l.mat || !l.date) return; var a=String(l.date).slice(0,4); if(annee!=="tous" && a!==String(annee)) return;
-    rows.push({mat:l.mat, date:l.date, annee:a, nom:l.nom, org:l.org||"", prom:l.prom||"", prenom:l.prenom||"", nomP:l.nomP||"", tel:l.tel||"", adresse:l.adresse||"", commune:l.commune||"", activite:l.activite||"", coach:l.coach||"", forme:l.forme||"", montant:num(l.montant), source:"Liste importée"}); vu[l.mat+"|"+a]=1; });
+    rows.push({mat:l.mat, date:l.date, annee:a, nom:l.nom, org:l.org||"", prom:l.prom||"", prenom:l.prenom||"", nomP:l.nomP||"", tel:l.tel||"", adresse:l.adresse||"", commune:l.commune||"", activite:l.activite||"", coach:l.coach||"", forme:l.forme||"", montant:montantLigne(l), gratuite:gratuiteDe(l.coach, a), source:"Liste importée"}); vu[l.mat+"|"+a]=1; });
   ADHDOCS.forEach(function(x){ if(x.statut==="Annulée") return; var a=String(x.date).slice(0,4); if(annee!=="tous" && a!==String(annee)) return; var k=(x.matricule||("NOM:"+cle(x.entrepriseNom)))+"|"+a;
-    if(vu[k]){ rows.forEach(function(r){ if(r.mat+"|"+r.annee===k){ r.montant=num(x.montant); r.source="Vente enregistrée"; } }); return; } vu[k]=1;
+    if(vu[k]){ rows.forEach(function(r){ if(r.mat+"|"+r.annee===k){ r.montant=num(x.montant); r.gratuite=""; r.source="Vente enregistrée"; } }); return; } vu[k]=1;
     var e=x.entrepriseId?APP().byId(x.entrepriseId):null;
     rows.push({mat:x.matricule||"", date:x.date, annee:a, nom:x.entrepriseNom, org:e?e.org:"", prom:e?e.prom:"", prenom:e?e.prenom:"", nomP:e?e.nomP:"", tel:e?e.tel:"", adresse:e?e.adresse:"", commune:e?e.commune:"", activite:e?e.activite:"", coach:e?e.coach:"", forme:e?e.forme:(x.categorieLib||""), montant:num(x.montant), source:"Vente enregistrée"}); });
   if(annee==="tous"){ var last={}; rows.forEach(function(r){ var k=r.mat||("NOM:"+cle(r.nom)); if(!last[k] || r.date>last[k].date) last[k]=r; }); rows=Object.keys(last).map(function(k){ return last[k]; }); }
@@ -125,7 +131,7 @@ function typeOf(code, t){ if(/^Masterclass \(MC1 à MC1\d\)$/.test(t||"")) t="Ma
 function plan(annee){
   var p=PARAM["annee_"+annee], cib={};
   INDIC.forEach(function(i){ cib[i.id]=(p && p.cibles && p.cibles[i.id]!=null) ? Number(p.cibles[i.id]) : i.def; });
-  return {annee:annee, existe:!!p, cibles:cib, cartes:(p && p.cartes && p.cartes.map(function(c){ return c.code+":"+c.tarif; }).join("|")!==CARTES_ANCIENNES) ? p.cartes : JSON.parse(JSON.stringify(CARTES_DEF)), places:(p && p.places!=null) ? num(p.places) : PLACES_DEF, pe:(p && p.pe) || JSON.parse(JSON.stringify(PE_DEF)),
+  return {annee:annee, existe:!!p, cibles:cib, cartes:(p && p.cartes && p.cartes.map(function(c){ return c.code+":"+c.tarif; }).join("|")!==CARTES_ANCIENNES) ? p.cartes : JSON.parse(JSON.stringify(CARTES_DEF)), places:(p && p.places!=null) ? num(p.places) : PLACES_DEF, gratuites:(p && p.gratuites) || JSON.parse(JSON.stringify(GRATUITES_DEF)), pe:(p && p.pe) || JSON.parse(JSON.stringify(PE_DEF)),
     prestations:(p && p.prestations!=null) ? Number(p.prestations) : PRESTA_DEF, financements:(p && p.financements!=null) ? Number(p.financements) : FINANC_DEF,
     majLe:p && p.majLe, majPar:p && p.majPar};
 }
@@ -197,6 +203,7 @@ function calc(per){
   var A=ADH.filter(function(x){ return x.statut!=="Annulée" && inP(x.date); });
   out.cartesNb=A.length; out.cartes=A.reduce(function(s,x){ return s+num(x.montant); },0);
   out.cartesNouv=A.filter(function(x){ return x.nature!=="Renouvellement"; }).length;
+  out.cartesGrat=A.filter(function(x){ return x.gratuite; }).length;
   var Q=valides(PE).filter(function(x){ return inP(x.date); });
   out.peNb=Q.length; out.pe=somme(Q); out.peQte=Q.reduce(function(s,x){ return s+(num(x.quantite)||1); },0);
   out.presta=R.reduce(function(s,r){ return s+num(r.montant); },0);
@@ -272,7 +279,7 @@ function vTableau(){
       (sous?'<span class="small muted">'+sous+'</span>':'')+(proj!=null?'<span class="small muted">Projection fin de période au rythme actuel : '+ent(proj)+' FCFA</span>':'')+'</div>';
   }
   h+='<section class="card"><div class="row between"><h2>Objectifs financiers · '+esc(P.label)+'</h2><span class="small muted">Période écoulée : '+Math.round(ec*100)+' %</span></div><div class="grid g4">'+
-    fin("Recettes des cartes d'adhésion", K.cartes, cibleCartes(Pl), K.cartesNb+" carte(s), dont "+K.cartesNouv+" nouvelle(s) adhésion(s)")+
+    fin("Recettes des cartes d'adhésion", K.cartes, cibleCartes(Pl), K.cartesNb+" carte(s), dont "+K.cartesNouv+" nouvelle(s) adhésion(s)"+(K.cartesGrat?" et "+K.cartesGrat+" gratuite(s) (programme partenaire)":""))+
     fin("Recettes de la Plateforme électronique (PE)", K.pe, ciblePE(Pl), K.peNb+" recette(s) · étiquettes, logos, factures, supports…")+
     fin("Recettes des prestations du CADE", K.presta, Pl.prestations, "Montants encaissés saisis dans le journal")+
     fin("Financements obtenus par les entreprises", K.financ, Pl.financements, "Montant demandé : "+ent(K.demande)+" FCFA")+'</div>'+
@@ -451,7 +458,7 @@ function vCartes(){
 
 /* ================= Écran : base des adhérents · version 1.7 ================= */
 function coachEmail(nom){ var k=cle(nom); if(!k) return ""; var m=APP().MEMBRES.filter(function(x){ return x.actif && cle(x.nom)===k; })[0]; return m?m.email:""; }
-function baseFiltres(){ return C.bf || (C.bf={q:"", commune:"", forme:"", mois:"", statut:""}); }
+function baseFiltres(){ return C.bf || (C.bf={q:"", commune:"", forme:"", mois:"", statut:"", paie:""}); }
 function statutBase(r){ var e=suiviDe(r.mat); if(!e) return {k:"non", lab:"Non suivie"}; if(e.horsSuivi) return {k:"retiree", lab:"Retirée du suivi"}; return {k:"suivie", lab:"Suivie"+(e.cohorte?" · cohorte "+e.cohorte:"")}; }
 function baseFiltrees(){
   var y=C.baseAn||Number(TODAY.slice(0,4)), F=baseFiltres(), q=cle(F.q);
@@ -461,6 +468,7 @@ function baseFiltrees(){
     if(F.forme && catDeForme(r.forme)!==F.forme) return false;
     if(F.mois && Number(String(r.date).slice(5,7))!==Number(F.mois)) return false;
     if(F.statut && statutBase(r).k!==F.statut) return false;
+    if(F.paie==="grat" && !r.gratuite) return false; if(F.paie==="pay" && r.gratuite) return false;
     return true; }).sort(function(a,b){ return a.date<b.date?1:a.date>b.date?-1:(a.nom<b.nom?-1:1); });
 }
 function vBaseImport(){
@@ -468,6 +476,7 @@ function vBaseImport(){
   h+='<p class="full">'+I.lignes.length+' adhérent(s) lus, pour un montant de <b>'+ent(I.total)+' FCFA</b>. '+(I.remplace?'<b>Cet import remplace</b> les '+I.remplace+' ligne(s) déjà importées pour '+I.annees.join(", ")+'.':'')+'</p>';
   h+='<div class="full tablewrap"><table><thead><tr><th>Mois</th><th class="num">Adhérents</th><th class="num">EI / SUARL</th><th class="num">GIE / coop.</th><th class="num">SARL / SA</th><th class="num">Montant (FCFA)</th></tr></thead><tbody>'+
     I.mois.map(function(m){ return '<tr><td>'+esc(m.lab)+'</td><td class="num">'+m.n+'</td><td class="num">'+m.EI+'</td><td class="num">'+m.GIE+'</td><td class="num">'+m.SOC+'</td><td class="num">'+ent(m.mt)+'</td></tr>'; }).join("")+'</tbody></table></div>';
+  if(I.gratuites) h+='<p class="full small"><b>'+I.gratuites+' adhésion(s) gratuite(s)</b> (coachs du programme partenaire, voir le plan annuel) : comptées comme adhérents, à 0 FCFA.</p>';
   if(I.sansForme) h+='<p class="full small"><b class="ko">'+I.sansForme+' ligne(s) sans forme juridique</b> : comptées comme entreprise individuelle (3 000 FCFA). Ajoutez une colonne « Forme juridique » au fichier pour les préciser.</p>';
   if(I.erreurs.length) h+='<details class="full"><summary class="small">'+I.erreurs.length+' remarque(s) sur le fichier</summary><ul class="small">'+I.erreurs.slice(0,40).map(function(e){ return '<li>Ligne '+esc(e.ligne)+' · '+esc(e.nom||"")+' : '+esc(e.probleme)+'</li>'; }).join("")+'</ul></details>';
   h+='<div class="full row between"><button class="btn ghost" data-act="c_bimpno">Annuler</button><button class="btn primary" data-act="c_bimpok">Importer ces '+I.lignes.length+' adhérents</button></div></section>';
@@ -480,19 +489,19 @@ function lireBase(buf, nomFichier){
     if(!x.dateIns){ erreurs.push({ligne:"—", nom:x.nom, probleme:"date d'inscription absente ou illisible : ligne non importée"}); return; }
     if(vu[x.id]){ erreurs.push({ligne:"—", nom:x.nom, probleme:"matricule présent deux fois : seule la première ligne est gardée"}); return; } vu[x.id]=1;
     var fo=normForme((x.comp||{}).forme||""), an=Number(x.dateIns.slice(0,4)), cat=catDeForme(fo);
-    L.push({mat:x.id, date:x.dateIns, prenom:x.prenom, nomP:x.nomP, prom:x.prom, tel:x.tel, adresse:x.adresse, commune:x.commune, activite:x.activite, nom:x.nom, org:x.org, coach:x.coach, forme:fo, montant:tarifCat(an,cat), _cat:cat});
+    L.push({mat:x.id, date:x.dateIns, prenom:x.prenom, nomP:x.nomP, prom:x.prom, tel:x.tel, adresse:x.adresse, commune:x.commune, activite:x.activite, nom:x.nom, org:x.org, coach:x.coach, forme:fo, montant:0, _cat:cat}); var dl=L[L.length-1]; dl.montant=montantLigne(dl); dl._grat=!!gratuiteDe(dl.coach, an);
   });
   if(!L.length){ toast("Aucune ligne exploitable dans ce fichier."); return; }
   var mois={}, annees={};
   L.forEach(function(l){ var k=l.date.slice(0,7); annees[l.date.slice(0,4)]=1; var m=mois[k]||(mois[k]={k:k, lab:MOISN[Number(k.slice(5,7))-1]+" "+k.slice(0,4), n:0, EI:0, GIE:0, SOC:0, mt:0}); m.n++; m[l._cat]++; m.mt+=l.montant; });
   var ann=Object.keys(annees).sort(), remplace=lignesImportees().filter(function(l){ return ann.indexOf(String(l.date).slice(0,4))>=0; }).length;
   C.bimp={fichier:nomFichier, lignes:L, total:L.reduce(function(s,l){ return s+l.montant; },0), mois:Object.keys(mois).sort().map(function(k){ return mois[k]; }),
-    sansForme:L.filter(function(l){ return !l.forme; }).length, erreurs:erreurs, annees:ann, remplace:remplace};
+    sansForme:L.filter(function(l){ return !l.forme; }).length, gratuites:L.filter(function(l){ return l._grat; }).length, erreurs:erreurs, annees:ann, remplace:remplace};
   C.tab="base"; APP().render(); window.scrollTo(0,0);
 }
 function importerBase(){
   var I=C.bimp, lots={}, at=new Date().toISOString();
-  I.lignes.forEach(function(l){ var k="lot_"+l.date.slice(0,4)+"_"+l.date.slice(5,7); var c=JSON.parse(JSON.stringify(l)); delete c._cat; (lots[k]=lots[k]||[]).push(c); });
+  I.lignes.forEach(function(l){ var k="lot_"+l.date.slice(0,4)+"_"+l.date.slice(5,7); var c=JSON.parse(JSON.stringify(l)); delete c._cat; delete c._grat; (lots[k]=lots[k]||[]).push(c); });
   LOTS.forEach(function(L){ if(I.annees.indexOf(String(L.annee))>=0 && !lots[L.id] && (L.lignes||[]).length) lots[L.id]=[]; });
   Object.keys(lots).forEach(function(k){ var pr=k.split("_");
     DB.save("adherents", k, {annee:Number(pr[1]), mois:Number(pr[2]), lignes:lots[k], fichier:I.fichier, importLe:at, importPar:ME().email}); });
@@ -503,7 +512,7 @@ function inscrire(mats, force){
   var y=String(C.bcoh||Number(TODAY.slice(0,4))), Pl=plan(Number(y)), deja=suiviesCohorte(y), rows=baseRows("tous"), faits=0, ignores=0;
   var aFaire=mats.filter(function(m){ var e=suiviDe(m); if(e && !e.horsSuivi){ ignores++; return false; } return true; });
   if(!aFaire.length){ toast(ignores?"Ces entreprises sont déjà suivies.":"Aucune entreprise sélectionnée."); return; }
-  if(!force && deja+aFaire.length>Pl.places){ C.depasse={mats:aFaire, y:y, n:deja+aFaire.length, places:Pl.places}; APP().render(); return; }
+  if(!force && deja+aFaire.length>Pl.places){ C.depasse={mats:aFaire, y:y, n:deja+aFaire.length, places:Pl.places, gratuites:JSON.parse(JSON.stringify(Pl.gratuites))}; APP().render(); return; }
   aFaire.forEach(function(m){
     var r=rows.filter(function(x){ return x.mat===m; })[0]; if(!r) return; var e=suiviDe(m);
     if(e){ e.horsSuivi=null; e.cohorte=y; e.suiviDepuis=TODAY; APP().saveEnt(e); }
@@ -516,13 +525,13 @@ function inscrire(mats, force){
 }
 function vBase(){
   var y=C.baseAn||Number(TODAY.slice(0,4)), Pl=plan(y), F=baseFiltres(), all=baseRows(y), L=baseFiltrees(), mgr=isMgr(), sel=C.bsel||(C.bsel={});
-  var tot=all.reduce(function(s,r){ return s+r.montant; },0), cib=cibleCartes(Pl), nbCib=Pl.cartes.reduce(function(a,c){ return a+num(c.cible); },0);
+  var tot=all.reduce(function(s,r){ return s+r.montant; },0), nGrat=all.filter(function(r){ return r.gratuite; }).length, cib=cibleCartes(Pl), nbCib=Pl.cartes.reduce(function(a,c){ return a+num(c.cible); },0);
   var coh=String(C.bcoh||Number(TODAY.slice(0,4))), nCoh=suiviesCohorte(coh), places=plan(Number(coh)).places;
   var h='<p class="small muted">Tous les adhérents de la CCIAK, pour le suivi financier des adhésions. Les entreprises accompagnées par le programme Yokkute y sont choisies chaque année et inscrites dans le module Entreprises.</p>';
   if(mgr) h+='<div class="row between"><span class="small muted">Liste mensuelle des adhérents (export CCIAK ou classeur vérifié avec la colonne « Forme juridique »). Un nouvel import remplace celui de la même année.</span><label class="btn file-btn">Importer une liste d\'adhérents<input type="file" id="c_bfile" accept=".xls,.xlsx"></label></div>';
   if(C.bimp) h+=vBaseImport();
   h+='<section class="card"><div class="row between"><h2>Adhérents '+y+'</h2><select id="c_byear" style="width:auto">'+yearOpts(y)+'</select></div><div class="grid g3">'+
-    '<div class="card kpi"><span class="v num">'+all.length+'</span><span class="l">adhérents sur '+ent(nbCib)+' cartes visées ('+(pct(all.length,nbCib)==null?"—":pct(all.length,nbCib)+" %")+')</span>'+barre(pct(all.length,nbCib))+'</div>'+
+    '<div class="card kpi"><span class="v num">'+all.length+'</span><span class="l">adhérents sur '+ent(nbCib)+' cartes visées ('+(pct(all.length,nbCib)==null?"—":pct(all.length,nbCib)+" %")+')'+(nGrat?' · dont '+nGrat+' gratuite(s), '+esc((Pl.gratuites||{}).programme||"programme partenaire"):'')+'</span>'+barre(pct(all.length,nbCib))+'</div>'+
     '<div class="card kpi"><span class="v num">'+ent(tot)+'</span><span class="l">FCFA de cartes sur '+ent(cib)+' visés ('+(pct(tot,cib)==null?"—":pct(tot,cib)+" %")+')</span>'+barre(pct(tot,cib))+'</div>'+
     '<div class="card kpi"><span class="v num">'+nCoh+' / '+places+'</span><span class="l">entreprises suivies dans la cohorte '+esc(coh)+(nCoh>places?' · <b class="ko">places dépassées</b>':'')+'</span>'+barre(pct(nCoh,places))+'</div></div></section>';
   if(C.depasse){ var D=C.depasse; h+='<div class="confirm"><p><b>Places dépassées.</b> La cohorte '+esc(D.y)+' compterait '+D.n+' entreprises pour '+D.places+' places prévues au plan. Confirmez si les ressources du programme le permettent, ou augmentez les places dans le plan annuel.</p><div class="row"><button class="btn sm ghost" data-act="c_bdepno">Retour</button><button class="btn sm primary" data-act="c_bdepok">Inscrire quand même</button></div></div>'; }
@@ -531,6 +540,7 @@ function vBase(){
     '<label class="f">Commune<select id="c_bcom"><option value="">Toutes</option>'+Object.keys(communes).sort().map(function(k){ return '<option value="'+esc(k)+'"'+(F.commune===k?" selected":"")+'>'+esc(communes[k])+'</option>'; }).join("")+'</select></label>'+
     '<label class="f">Forme<select id="c_bfor"><option value="">Toutes</option>'+[["EI","EI / SUARL"],["GIE","GIE / Coopérative"],["SOC","SARL / SA"]].map(function(o){ return '<option value="'+o[0]+'"'+(F.forme===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></label>'+
     '<label class="f">Mois<select id="c_bmois"><option value="">Tous</option>'+MOISN.map(function(m,i){ return '<option value="'+(i+1)+'"'+(Number(F.mois)===i+1?" selected":"")+'>'+m+'</option>'; }).join("")+'</select></label>'+
+    '<label class="f">Paiement<select id="c_bpaie"><option value="">Toutes</option>'+[["pay","Payantes"],["grat","Gratuites (programme)"]].map(function(o){ return '<option value="'+o[0]+'"'+(F.paie===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></label>'+
     '<label class="f">Suivi<select id="c_bst"><option value="">Tous</option>'+[["suivie","Suivies"],["non","Non suivies"],["retiree","Retirées du suivi"]].map(function(o){ return '<option value="'+o[0]+'"'+(F.statut===o[0]?" selected":"")+'>'+o[1]+'</option>'; }).join("")+'</select></label></div>';
   var nSel=Object.keys(sel).filter(function(k){ return sel[k]; }).length;
   h+='<div class="row between"><span class="small muted">'+L.length+' adhérent(s) affiché(s) · '+ent(L.reduce(function(s,r){ return s+r.montant; },0))+' FCFA</span><div class="row">'+
@@ -543,7 +553,7 @@ function vBase(){
     L.slice(0,N).forEach(function(r){ var st=statutBase(r), ok=st.k!=="suivie";
       h+='<tr>'+(mgr?'<td>'+(ok && r.mat?'<input type="checkbox" data-bsel="'+esc(r.mat)+'"'+(sel[r.mat]?" checked":"")+' aria-label="Sélectionner">':'')+'</td>':'')+
         '<td><b>'+esc(r.nom)+'</b><div class="small muted">'+esc([r.prom, r.mat, r.tel, r.coach?("coach : "+r.coach):""].filter(Boolean).join(" · "))+'</div></td>'+
-        '<td class="hide-sm">'+esc(r.commune||"—")+'</td><td class="hide-sm">'+esc(r.forme||"EI (par défaut)")+'</td><td>'+fd(r.date)+'</td><td class="num">'+ent(r.montant)+'</td>'+
+        '<td class="hide-sm">'+esc(r.commune||"—")+'</td><td class="hide-sm">'+esc(r.forme||"EI (par défaut)")+'</td><td>'+fd(r.date)+'</td><td class="num">'+(r.gratuite?'<span class="small" title="'+esc(r.gratuite)+'">Gratuite</span>':ent(r.montant))+'</td>'+
         '<td>'+(st.k==="suivie"?'<a href="#" data-act="fiche" data-id="'+esc(r.mat)+'"><span class="tag">'+esc(st.lab)+'</span></a>':st.k==="retiree"?'<span class="small muted">'+esc(st.lab)+'</span> ':'')+
         (mgr && ok && r.mat?'<button class="btn sm ghost" data-act="c_bins" data-id="'+esc(r.mat)+'">'+(st.k==="retiree"?"Réintégrer":"Inscrire au programme")+'</button>':(st.k==="non"?'<span class="small muted">Non suivie</span>':''))+'</td></tr>'; });
     h+='</tbody></table></div>';
@@ -553,7 +563,7 @@ function vBase(){
 }
 function xlsBase(){
   exporter("Base_adherents_"+(C.baseAn||TODAY.slice(0,4))+".xlsx", baseFiltrees().map(function(r){ return {"Matricule":r.mat, "Date d'adhésion":r.date, "Adhérent":r.nom, "Organisation":r.org, "Promoteur":r.prom, "Téléphone":r.tel,
-    "Commune":r.commune, "Activité":r.activite, "Coach":r.coach, "Forme juridique":r.forme||"EI (par défaut)", "Montant (FCFA)":r.montant, "Source":r.source, "Suivi":statutBase(r).lab}; }));
+    "Commune":r.commune, "Activité":r.activite, "Coach":r.coach, "Forme juridique":r.forme||"EI (par défaut)", "Montant (FCFA)":r.montant, "Adhésion gratuite (programme)":r.gratuite||"", "Source":r.source, "Suivi":statutBase(r).lab}; }));
 }
 
 /* ================= Écran : plan annuel et référentiel ================= */
@@ -582,7 +592,9 @@ function vPlan(){
   h+='<h3>Autres objectifs financiers</h3><div class="grid g2">'+
     '<label class="f">Recettes des prestations du CADE (FCFA)<input type="number" min="0" step="10000" id="c_ppres" value="'+esc(src.prestations)+'"'+dis+'></label>'+
     '<label class="f">Financements à obtenir pour les entreprises (FCFA)<input type="number" min="0" step="100000" id="c_pfin" value="'+esc(src.financements)+'"'+dis+'></label>'+
-    '<label class="f">Entreprises à suivre dans le programme (places de la cohorte)<input type="number" min="0" step="1" id="c_pplaces" value="'+esc(src.places)+'"'+dis+'></label></div>'+
+    '<label class="f">Entreprises à suivre dans le programme (places de la cohorte)<input type="number" min="0" step="1" id="c_pplaces" value="'+esc(src.places)+'"'+dis+'></label>'+
+    '<label class="f">Programme partenaire dont les adhésions sont gratuites<input type="text" id="c_pgprog" value="'+esc((src.gratuites||{}).programme||"")+'"'+dis+'></label>'+
+    '<label class="f">Coachs de ce programme (un par ligne, comme dans la liste CCIAK)<textarea id="c_pgcoach" rows="3"'+dis+'>'+esc(((src.gratuites||{}).coachs||[]).join("\n"))+'</textarea></label></div>'+
     '<p class="small">Recettes propres visées (cartes + PE + prestations) : <b>'+ent(cibleCartes(src)+ciblePE(src)+num(src.prestations))+' FCFA</b>.</p>';
   if(E) h+='<div class="row between"><button class="btn ghost" data-act="c_plcancel">Annuler</button><button class="btn primary" data-act="c_plsave">Enregistrer le plan '+y+'</button></div>';
   h+='<p class="small muted">Les cibles de la période (mois, trimestre, semestre) sont calculées au prorata de la cible annuelle.</p></section>';
@@ -608,7 +620,7 @@ function savePlan(){
   var codes={}; E.cartes.forEach(function(c,i){ if(!c.code){ c.code="C"+Date.now().toString(36)+i; } codes[c.code]=1; });
   var doc={annee:E.annee, cibles:{}, cartes:E.cartes.map(function(c){ return {code:c.code, lib:String(c.lib).trim(), tarif:num(c.tarif), cible:num(c.cible)}; }),
     pe:E.pe.map(function(c){ return {code:c.code, lib:String(c.lib).trim(), tarif:num(c.tarif), cible:num(c.cible)}; }),
-    prestations:num(E.prestations), financements:num(E.financements), places:Math.max(0,Math.round(num(E.places))), majLe:TODAY, majPar:ME().email};
+    prestations:num(E.prestations), financements:num(E.financements), places:Math.max(0,Math.round(num(E.places))), gratuites:{programme:String((E.gratuites||{}).programme||"").trim(), coachs:((E.gratuites||{}).coachs||[]).map(function(c){ return String(c).trim(); }).filter(Boolean)}, majLe:TODAY, majPar:ME().email};
   INDIC.forEach(function(i){ doc.cibles[i.id]=num(E.cibles[i.id]); });
   DB.save("cade_param", "annee_"+E.annee, doc); APP().journal("realisation", null, "Plan annuel "+E.annee+" enregistré");
   C.planEdit=null; toast("Plan "+doc.annee+" enregistré."); APP().render();
@@ -626,7 +638,7 @@ function xlsJournal(){
 }
 function xlsAdh(){
   exporter("Cartes_adhesion_"+TODAY+".xlsx", ADH.slice().sort(function(a,b){ return a.date<b.date?-1:1; }).map(function(x){ return {"Date":x.date, "Matricule":x.matricule||"", "Entreprise":x.entrepriseNom, "Catégorie":x.categorieLib||x.categorie,
-    "Nature":x.nature, "Source":x.importe?"Liste CCIAK importée":"Vente enregistrée", "Montant":x.montant, "Mode de paiement":x.modePaiement||"", "Reçu":x.recu||"", "Valable jusqu'au":x.echeance, "Statut":x.statut, "Motif d'annulation":x.motifAnnulation||"", "Saisi par":x.auteur}; }));
+    "Nature":x.nature, "Source":x.importe?"Liste CCIAK importée":"Vente enregistrée", "Montant":x.montant, "Adhésion gratuite (programme)":x.gratuite||"", "Mode de paiement":x.modePaiement||"", "Reçu":x.recu||"", "Valable jusqu'au":x.echeance, "Statut":x.statut, "Motif d'annulation":x.motifAnnulation||"", "Saisi par":x.auteur}; }));
 }
 
 function xlsPE(){
@@ -998,7 +1010,7 @@ function click(t, a){
     var y=ADH.filter(function(z){ return z.id===id; })[0]; if(!y) return; var d=JSON.parse(JSON.stringify(y)); delete d._id;
     d.statut="Annulée"; d.motifAnnulation=mo; d.annuleLe=TODAY; d.annulePar=ME().email; DB.save("adhesions", y.id, d);
     APP().journal("adhesion", null, "Carte annulée · "+y.entrepriseNom+" · "+money(y.montant)+" · motif : "+mo); C.annuler=null; toast("Vente annulée."); APP().render(); return; }
-  if(a==="c_pledit"){ var Pl=plan(C.planAnnee); C.planEdit={annee:C.planAnnee, cibles:JSON.parse(JSON.stringify(Pl.cibles)), cartes:JSON.parse(JSON.stringify(Pl.cartes)), pe:JSON.parse(JSON.stringify(Pl.pe)), prestations:Pl.prestations, financements:Pl.financements, places:Pl.places}; APP().render(); return; }
+  if(a==="c_pledit"){ var Pl=plan(C.planAnnee); C.planEdit={annee:C.planAnnee, cibles:JSON.parse(JSON.stringify(Pl.cibles)), cartes:JSON.parse(JSON.stringify(Pl.cartes)), pe:JSON.parse(JSON.stringify(Pl.pe)), prestations:Pl.prestations, financements:Pl.financements, places:Pl.places, gratuites:JSON.parse(JSON.stringify(Pl.gratuites))}; APP().render(); return; }
   if(a==="c_plcancel"){ C.planEdit=null; APP().render(); return; }
   if(a==="c_plsave"){ savePlan(); return; }
   if(a==="c_pcadd"){ C.planEdit.cartes.push({code:"", lib:"", tarif:0, cible:0}); APP().render(); return; }
@@ -1022,7 +1034,7 @@ function change(t){
   if(id==="c_byear"){ C.baseAn=Number(t.value); C.bsel={}; C.bn=100; APP().render(); return true; }
   if(id==="c_bcoh"){ C.bcoh=t.value; APP().render(); return true; }
   if(t.hasAttribute("data-bsel")){ C.bsel=C.bsel||{}; C.bsel[t.getAttribute("data-bsel")]=t.checked; APP().render(); return true; }
-  var bfm={c_bcom:"commune", c_bfor:"forme", c_bmois:"mois", c_bst:"statut"}; if(bfm[id]){ baseFiltres()[bfm[id]]=t.value; C.bn=100; APP().render(); return true; }
+  var bfm={c_bcom:"commune", c_bfor:"forme", c_bmois:"mois", c_bst:"statut", c_bpaie:"paie"}; if(bfm[id]){ baseFiltres()[bfm[id]]=t.value; C.bn=100; APP().render(); return true; }
   if(id==="c_pan"||id==="c_cyear"||id==="c_peyear"){ C.per.annee=Number(t.value); APP().render(); return true; }
   if(id==="c_plyear"){ C.planAnnee=Number(t.value); C.planEdit=null; APP().render(); return true; }
   if(id==="c_jaxe"){ C.jf.axe=t.value; APP().render(); return true; }
@@ -1054,7 +1066,7 @@ function change(t){
   if(q && id==="pe_ent"){ q.entTxt=t.value; var pe2=entFromText(t.value); if(pe2 && pe2.tel && !q.tel){ q.tel=pe2.tel; setVal("pe_tel", q.tel); } return true; }
   if(C.ntype && id==="c_ntm"){ C.ntype.m=t.checked; return true; }
   if(C.ntype && id==="c_ntp"){ C.ntype.p=t.checked; return true; }
-  if(C.planEdit && (t.hasAttribute("data-cpi") || t.hasAttribute("data-cpc") || t.hasAttribute("data-cpe") || id==="c_ppres" || id==="c_pfin" || id==="c_pplaces")){ input(t); return true; }
+  if(C.planEdit && (t.hasAttribute("data-cpi") || t.hasAttribute("data-cpc") || t.hasAttribute("data-cpe") || id==="c_ppres" || id==="c_pfin" || id==="c_pplaces" || id==="c_pgprog" || id==="c_pgcoach")){ input(t); return true; }
   return false;
 }
 function input(t){
@@ -1072,6 +1084,8 @@ function input(t){
     if(id==="c_ppres"){ E.prestations=t.value; return true; }
     if(id==="c_pfin"){ E.financements=t.value; return true; }
     if(id==="c_pplaces"){ E.places=t.value; return true; }
+    if(id==="c_pgprog"){ E.gratuites=E.gratuites||{}; E.gratuites.programme=t.value; return true; }
+    if(id==="c_pgcoach"){ E.gratuites=E.gratuites||{}; E.gratuites.coachs=String(t.value).split(/\n/); return true; }
   }
   return false;
 }
