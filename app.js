@@ -2,7 +2,7 @@
 "use strict";
 (function(){
 var DB = window.YK_DB, CFG = window.YK_CONFIG, OWNER = String(CFG.ownerEmail).toLowerCase();
-var ENT = [], MEMBRES = [], TACHES = [], JOURNAL = [], RESS = {};
+var ENT = [], ENT_ALL = [], MEMBRES = [], TACHES = [], JOURNAL = [], RESS = {};
 var ME = null;               /* {email, nom, role} */
 var LOADED = {};
 var EDIT_VIEWS = ["diag","newent","pdi","visite","tachenew"];
@@ -18,7 +18,8 @@ function norm(s){ return cle(s).replace(/\b(ETS|ETABLISSEMENTS?|GIE|SARL|SUARL|S
 function now(){ return new Date().toISOString(); }
 var tt; function toast(m){ var t=document.getElementById("toast"); t.textContent=m; t.hidden=false; clearTimeout(tt); tt=setTimeout(function(){t.hidden=true;},4200); }
 window.ykToast = toast;
-function byId(id){ for(var i=0;i<ENT.length;i++) if(ENT[i].id===id) return ENT[i]; return null; }
+/* Version 1.7 : ENT = entreprises suivies ; ENT_ALL inclut celles retirées du suivi (gardées avec leur historique). */
+function byId(id){ for(var i=0;i<ENT_ALL.length;i++) if(ENT_ALL[i].id===id) return ENT_ALL[i]; return null; }
 function libById(id){ for(var i=0;i<LIB.length;i++) if(LIB[i].id===id) return LIB[i]; return null; }
 function membreNom(email){ if(!email) return "—"; if(email===OWNER) return "Propriétaire ("+email+")"; var m=MEMBRES.filter(function(x){return x.email===email;})[0]; return m&&m.nom ? m.nom : email; }
 function court(email){ if(!email) return "—"; if(email===ME.email) return "moi"; if(email===OWNER) return "Propriétaire"; var m=MEMBRES.filter(function(x){return x.email===email;})[0]; return m&&m.nom ? m.nom : email.split("@")[0]; }
@@ -159,23 +160,27 @@ function vTableau(){
 
 /* ================= Entreprises ================= */
 function vEntreprises(){
-  var L=ENT.filter(function(e){
+  var retirees=ENT_ALL.filter(function(e){ return e.horsSuivi; }), cohs={}; ENT.forEach(function(e){ if(e.cohorte) cohs[e.cohorte]=1; });
+  var L=(S.f.ret?retirees:ENT).filter(function(e){
+    if(S.f.coh && String(e.cohorte||"")!==S.f.coh) return false;
     var q=cle(S.f.q); if(q && cle(e.nom+" "+e.org+" "+e.prom+" "+e.id+" "+e.commune+" "+e.activite).indexOf(q)<0) return false;
     if(S.f.seg && S.f.seg!==(segOf(e)||"none")) return false;
     if(S.f.feu && (e.feu||"none")!==S.f.feu) return false;
     if(S.f.cons && e.conseiller!==S.f.cons) return false; return true; }).sort(function(a,b){ return a.nom<b.nom?-1:1; });
-  var h='<div class="row between"><div><p class="eyebrow">'+ENT.length+' entreprise(s)</p><h1>Entreprises</h1></div><div class="row">'+
+  var h='<div class="row between"><div><p class="eyebrow">'+ENT.length+' entreprise(s) suivie(s) par le programme</p><h1>'+(S.f.ret?"Entreprises retirées du suivi":"Entreprises suivies")+'</h1></div><div class="row">'+
     '<button class="btn" data-act="modele">Modèle Excel</button>'+
-    (isOwner()?'<label class="btn file-btn">Importer l\'export CCIAK<input type="file" id="fimport" accept=".xls,.xlsx,.csv,.htm,.html"></label>':'')+
+    (isOwner()?'<label class="btn file-btn" title="Pour les seules entreprises suivies. Les adhérents s\'importent dans Activités CADE › Base des adhérents.">Importer des entreprises suivies<input type="file" id="fimport" accept=".xls,.xlsx,.csv,.htm,.html"></label>':'')+
     (canCreate()?'<button class="btn primary" data-act="newent">+ Nouvelle entreprise</button>':'')+'</div></div>';
   if(S.imp) h+=vImport();
-  h+='<div class="card"><div class="filters" style="grid-template-columns:2fr 1fr 1fr'+(MEMBRES.length?' 1fr':'')+'"><label class="f s">Rechercher<input type="search" id="fq" value="'+esc(S.f.q)+'" placeholder="Nom, promoteur, matricule, commune, activité"></label>'+
+  h+='<p class="small muted">Les entreprises suivies sont choisies dans la base des adhérents (Activités CADE › Base des adhérents › « Inscrire au programme »).'+(retirees.length||S.f.ret?' <a href="#" data-act="fret">'+(S.f.ret?"Revenir aux entreprises suivies":"Voir les "+retirees.length+" entreprise(s) retirée(s) du suivi")+'</a>':'')+'</p>';
+  h+='<div class="card"><div class="filters" style="grid-template-columns:2fr 1fr 1fr'+(Object.keys(cohs).length?' 1fr':'')+(MEMBRES.length?' 1fr':'')+'"><label class="f s">Rechercher<input type="search" id="fq" value="'+esc(S.f.q)+'" placeholder="Nom, promoteur, matricule, commune, activité"></label>'+
     '<label class="f">Segment<select id="fseg"><option value="">Tous</option><option value="A">A · Structuration</option><option value="B">B · Consolidation</option><option value="C">C · Croissance</option><option value="none">À diagnostiquer</option></select></label>'+
     '<label class="f">Feu<select id="ffeu"><option value="">Tous</option><option>Vert</option><option>Orange</option><option>Rouge</option><option value="none">Pas encore suivi</option></select></label>'+
+    (Object.keys(cohs).length?'<label class="f">Cohorte<select id="fcoh"><option value="">Toutes</option>'+Object.keys(cohs).sort().map(function(c){ return '<option'+(S.f.coh===c?" selected":"")+'>'+esc(c)+'</option>'; }).join("")+'</select></label>':'')+
     (MEMBRES.length?'<label class="f">Conseiller<select id="fcons"><option value="">Tous</option>'+conseillers().map(function(c){return '<option value="'+esc(c.email)+'">'+esc(cLab(c))+'</option>';}).join("")+'</select></label>':'')+'</div></div>';
   h+='<div class="card" style="padding:0"><div class="tablewrap"><table><thead><tr><th>Entreprise</th><th>Segment</th><th>Feu</th><th class="hide-sm">Activité</th><th class="hide-sm">Commune</th>'+(MEMBRES.length?'<th class="hide-sm">Conseiller</th>':'')+'<th class="hide-sm">Dernière visite</th></tr></thead><tbody>';
-  if(!L.length) h+='<tr><td colspan="7" class="empty">'+(ENT.length?"Aucune entreprise ne correspond à ces filtres.":"Aucune entreprise enregistrée.")+'</td></tr>';
-  L.forEach(function(e){ h+='<tr class="click" data-act="fiche" data-id="'+esc(e.id)+'" tabindex="0"><td><b>'+esc(e.nom)+'</b><div class="small muted">'+esc(e.prom)+' · '+esc(e.id)+'</div></td><td>'+segChip(segOf(e))+'</td><td>'+feuChip(e.feu)+'</td><td class="hide-sm">'+esc(e.activite||e.secteur)+'</td><td class="hide-sm">'+esc(e.commune)+'</td>'+(MEMBRES.length?'<td class="hide-sm">'+esc(court(e.conseiller))+'</td>':'')+'<td class="hide-sm">'+fd(lastVisit(e))+'</td></tr>'; });
+  if(!L.length) h+='<tr><td colspan="7" class="empty">'+(S.f.ret?"Aucune entreprise retirée du suivi.":ENT.length?"Aucune entreprise ne correspond à ces filtres.":"Aucune entreprise suivie pour le moment : inscrivez-en depuis la base des adhérents.")+'</td></tr>';
+  L.forEach(function(e){ h+='<tr class="click" data-act="fiche" data-id="'+esc(e.id)+'" tabindex="0"><td><b>'+esc(e.nom)+'</b><div class="small muted">'+esc(e.prom)+' · '+esc(e.id)+(e.cohorte?' · cohorte '+esc(e.cohorte):'')+(e.horsSuivi?' · retirée le '+fd(e.horsSuivi.date):'')+'</div></td><td>'+segChip(segOf(e))+'</td><td>'+feuChip(e.feu)+'</td><td class="hide-sm">'+esc(e.activite||e.secteur)+'</td><td class="hide-sm">'+esc(e.commune)+'</td>'+(MEMBRES.length?'<td class="hide-sm">'+esc(court(e.conseiller))+'</td>':'')+'<td class="hide-sm">'+fd(lastVisit(e))+'</td></tr>'; });
   return h+'</tbody></table></div></div>';
 }
 
@@ -287,7 +292,7 @@ function saveEntForm(force){
   ne.id=id2; ne.prom=n.prom; if(!ne.secteur && ne.activite) ne.secteur=filiereDe(ne.activite); if(!ne.forme) ne.forme=formeDe(ne.nom, ne.org);
   ne.hist=[{date:TODAY, auteur:ME.email, champs:["Créée dans l'application"]}];
   saveEnt(ne); journal("entreprise_creee", ne, "Entreprise enregistrée");
-  ENT.push(ne); S.newEnt=null; S.dup=null; toast("Entreprise enregistrée ("+id2+")."); go("fiche", id2);
+  ENT.push(ne); ENT_ALL.push(ne); S.newEnt=null; S.dup=null; toast("Entreprise enregistrée ("+id2+")."); go("fiche", id2);
 }
 
 /* ================= Fiche entreprise ================= */
@@ -298,11 +303,14 @@ function vFiche(){
   h+='<div class="row between"><div><p class="eyebrow">'+esc(e.id)+'</p><h1>'+esc(e.nom)+'</h1><div class="row" style="margin-top:6px">'+segChip(s)+feuChip(e.feu)+'</div></div><div class="row">'+
     (ce?'<button class="btn primary" data-act="newdiag" data-id="'+esc(e.id)+'">'+(e.notes?"Refaire le diagnostic":"Démarrer le diagnostic")+'</button>':'')+
     (e.pdi?'<button class="btn" data-act="pdi" data-id="'+esc(e.id)+'">'+(ce?"Voir le PDI":"Consulter le PDI")+'</button>':'')+
-    (e.pdi&&ce?'<button class="btn" data-act="visite" data-id="'+esc(e.id)+'">Nouvelle visite</button>':'')+'</div></div>';
+    (e.pdi&&ce?'<button class="btn" data-act="visite" data-id="'+esc(e.id)+'">Nouvelle visite</button>':'')+
+    (isMgr()&&!e.horsSuivi&&S.retrait!==e.id?'<button class="btn ghost" data-act="retirer" data-id="'+esc(e.id)+'">Retirer du suivi</button>':'')+'</div></div>';
+  if(S.retrait===e.id) h+='<div class="confirm"><p>L\'entreprise quittera la liste des entreprises suivies. Sa fiche, ses diagnostics et son PDI sont conservés, et elle reste dans la base des adhérents.</p><label class="f">Motif (obligatoire)<input type="text" id="rmotif" placeholder="Ex. : fin de parcours, promoteur indisponible, changement de cohorte"></label><div class="row"><button class="btn sm ghost" data-act="retirerno">Retour</button><button class="btn sm danger" data-act="retirerok" data-id="'+esc(e.id)+'">Retirer du suivi</button></div></div>';
+  if(e.horsSuivi) h+='<p class="ro-banner">Retirée du suivi le '+fd(e.horsSuivi.date)+' par '+esc(court(e.horsSuivi.par))+' · motif : '+esc(e.horsSuivi.motif||"—")+'. '+(isMgr()?'<button class="btn sm" data-act="reintegrer" data-id="'+esc(e.id)+'">Réintégrer au suivi</button>':'')+'</p>';
   if(!ce && canCreate()) h+='<p class="ro-banner">Cette entreprise est suivie par '+esc(membreNom(e.conseiller))+'. Vous pouvez la consulter ; pour la modifier, le propriétaire doit vous l\'attribuer.</p>';
   var hl=(e.hist||[]).length?e.hist[e.hist.length-1]:null;
   h+='<section class="card"><div class="row between"><h2>Identification</h2>'+(ce?'<button class="btn sm" data-act="editent" data-id="'+esc(e.id)+'">Modifier l\'identification</button>':'')+'</div><div class="info">'+
-    inf("Matricule CCIAK",e.id)+inf("Date d'inscription",fd(e.dateIns))+inf("Organisation",e.org||"—")+
+    inf("Matricule CCIAK",e.id)+inf("Date d'inscription",fd(e.dateIns))+(e.cohorte?inf("Cohorte du programme",e.cohorte+(e.suiviDepuis?" · suivie depuis le "+fd(e.suiviDepuis):"")):"")+inf("Organisation",e.org||"—")+
     inf("Promoteur",e.prom+(e.genre||e.age?" ("+[e.genre==="F"?"femme":e.genre==="H"?"homme":"",AGES[e.age]?AGES[e.age].toLowerCase():""].filter(Boolean).join(", ")+")":""))+
     inf("Téléphone",e.tel||"—")+inf("Adresse",e.adresse||"—")+inf("Commune · département",(e.commune||"—")+" · "+(e.dept||"—"))+inf("Activité",e.activite||"—")+inf("Filière",e.secteur||"—")+
     inf("Forme juridique",e.forme||"—")+inf("NINEA · RCCM",(e.ninea||"—")+" · "+(e.rccm||"—"))+inf("Effectifs (permanents · temporaires)",(e.effP==null?"—":e.effP)+" · "+(e.effT==null?"—":e.effT))+'</div>';
@@ -748,7 +756,7 @@ function periode(r){
   else { a=y+"-01-01"; b=y+"-12-31"; lab="Année "+y+" (rapport annuel)"; f=String(y); }
   return {debut:a, fin:b, label:lab, fichier:f};
 }
-var JTYPES={recette_pe:"Recette PE", entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution", piece_jointe:"Pièce justificative", realisation:"Activité CADE", adhesion:"Carte d'adhésion"};
+var JTYPES={recette_pe:"Recette PE", inscription_programme:"Inscription au programme", entreprise_creee:"Nouvelle entreprise", entreprise_modifiee:"Fiche modifiée", import:"Import", diagnostic:"Diagnostic", pdi_valide:"PDI validé", action_faite:"Action réalisée", visite:"Visite de suivi", tache_creee:"Tâche attribuée", tache_faite:"Tâche terminée", membre:"Équipe", attribution:"Attribution", piece_jointe:"Pièce justificative", realisation:"Activité CADE", adhesion:"Carte d'adhésion"};
 function calcRapport(){
   var P=periode(S.rap), inP=function(d){ return d && String(d).slice(0,10)>=P.debut && String(d).slice(0,10)<=P.fin; };
   var R={P:P, nouv:0, diags:[], pdiVal:0, actFaites:0, actRetard:0, actEnCours:0, visites:0, feux:{Vert:0,Orange:0,Rouge:0}, caVar:[], tCrees:0, tFaites:0, tRetard:0, besoins:{}, cons:{}, seg:{A:0,B:0,C:0}, volets:VOLETS.map(function(){return {o:0,app:0};}), formalisees:0};
@@ -913,7 +921,7 @@ function go(v,id){ S.addFor=null; S.confirmDel=null; S.view=v; if(id) S.id=id; r
 
 /* ================= Données : écoute ================= */
 function refresh(){ if(EDIT_VIEWS.indexOf(S.view)>=0 || (S.view==="cade" && window.YK_CADE.editing()) || (S.view==="biblio"&&S.edit) || (S.view==="taches"&&S.newTask) || (S.view==="entreprises"&&S.imp) || (document.activeElement && /INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName))){ S.stale=true; status(); return; } render(); }
-DB.listen("entreprises", function(docs){ ENT=docs.map(function(d){ d.id=d.id||d._id; return d; }); LOADED.entreprises=true; refresh(); });
+DB.listen("entreprises", function(docs){ ENT_ALL=docs.map(function(d){ d.id=d.id||d._id; return d; }); ENT=ENT_ALL.filter(function(e){ return !e.horsSuivi; }); LOADED.entreprises=true; refresh(); });
 DB.listen("membres", function(docs){ MEMBRES=docs.map(function(d){ d.email=d.email||d._id; return d; }); LOADED.membres=true; if(ME && ME.role!=="proprietaire"){ var m=MEMBRES.filter(function(x){return x.email===ME.email;})[0]; if(m){ ME.role=m.actif?m.role:"aucun"; ME.nom=m.nom||ME.nom; } } refresh(); });
 DB.listen("taches", function(docs){ TACHES=docs.map(function(d){ d.id=d.id||d._id; return d; }); refresh(); });
 DB.listen("journal", function(docs){ JOURNAL=docs; refresh(); });
@@ -957,7 +965,13 @@ document.addEventListener("click", function(ev){
   else if(a==="savent"){ saveEntForm(!!t.getAttribute("data-force")); }
   else if(a==="askdel"){ S.confirmDel=t.getAttribute("data-id"); render(); }
   else if(a==="canceldel"){ S.confirmDel=null; render(); }
-  else if(a==="delent"){ var de=byId(t.getAttribute("data-id")); DB.del("entreprises", de.id); journal("entreprise_modifiee", de, "Entreprise supprimée"); ENT=ENT.filter(function(x){return x.id!==de.id;}); toast("Entreprise supprimée."); go("entreprises"); }
+  else if(a==="fret"){ S.f.ret=!S.f.ret; render(); }
+  else if(a==="retirer"){ S.retrait=t.getAttribute("data-id"); render(); }
+  else if(a==="retirerno"){ S.retrait=null; render(); }
+  else if(a==="retirerok"){ var re=byId(t.getAttribute("data-id")), rm=String((document.getElementById("rmotif")||{}).value||"").trim(); if(!re) return; if(!rm){ toast("Indiquez le motif."); return; }
+    re.horsSuivi={date:TODAY, par:ME.email, motif:rm}; saveEnt(re); ENT=ENT.filter(function(x){ return x.id!==re.id; }); journal("entreprise_modifiee", re, "Retirée du suivi · motif : "+rm); S.retrait=null; toast("Entreprise retirée du suivi : elle reste dans la base des adhérents."); go("entreprises"); }
+  else if(a==="reintegrer"){ var ri=byId(t.getAttribute("data-id")); if(!ri) return; ri.horsSuivi=null; if(!ri.cohorte) ri.cohorte=TODAY.slice(0,4); saveEnt(ri); if(ENT.indexOf(ri)<0) ENT.push(ri); journal("entreprise_modifiee", ri, "Réintégrée au suivi · cohorte "+ri.cohorte); toast("Entreprise réintégrée au suivi."); render(); }
+  else if(a==="delent"){ var de=byId(t.getAttribute("data-id")); DB.del("entreprises", de.id); journal("entreprise_modifiee", de, "Entreprise supprimée"); ENT=ENT.filter(function(x){return x.id!==de.id;}); ENT_ALL=ENT_ALL.filter(function(x){return x.id!==de.id;}); toast("Entreprise supprimée."); go("entreprises"); }
   else if(a==="newdiag"){ startDiag(t.getAttribute("data-id")); }
   else if(a==="resetdiag"){ var rid=S.diag.id; dropDraft(rid); startDiag(rid); }
   else if(a==="step"){ S.diag.step=Number(t.getAttribute("data-s")); saveDraft(); render(); window.scrollTo(0,0); }
@@ -1042,6 +1056,7 @@ document.addEventListener("change", function(ev){
   if(t.id==="fseg"){ S.f.seg=t.value; render(); return; }
   if(t.id==="ffeu"){ S.f.feu=t.value; render(); return; }
   if(t.id==="fcons"){ S.f.cons=t.value; render(); return; }
+  if(t.id==="fcoh"){ S.f.coh=t.value; render(); return; }
   if(t.id==="bnat"){ S.bnat=t.value; render(); return; }
   if(t.id==="bseg"){ S.bseg=t.value; render(); return; }
   if(t.id==="tfst"){ S.tf.statut=t.value; render(); return; }
@@ -1098,7 +1113,7 @@ document.getElementById("sync").addEventListener("click", function(){ if(S.stale
 window.addEventListener("beforeprint", function(){ if(!document.body.classList.contains("printing")){ /* impression directe : rien de spécial */ } });
 
 /* Passerelle vers le module « Activités CADE » (cade.js). */
-window.YK_APP = { get ME(){ return ME; }, get ENT(){ return ENT; }, get MEMBRES(){ return MEMBRES; },
+window.YK_APP = { get ME(){ return ME; }, get ENT(){ return ENT; }, get ENT_ALL(){ return ENT_ALL; }, saveEnt:saveEnt, nouvelleEnt:nouvelleEnt, get MEMBRES(){ return MEMBRES; },
   get TACHES(){ return TACHES; }, OWNER:OWNER, CFG:CFG, membreNom:membreNom, S_view:function(){ return S.view; }, conseillers:conseillers, isMgr:isMgr, terminerTache:terminerTache, enRetard:enRetard, printHTML:printHTML,
   render:render, refresh:refresh, go:go, journal:journal, court:court, byId:byId, toast:toast };
 if("serviceWorker" in navigator && location.protocol==="https:") navigator.serviceWorker.register("sw.js").catch(function(e){ console.warn(e); });

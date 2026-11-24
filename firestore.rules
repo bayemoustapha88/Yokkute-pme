@@ -83,6 +83,13 @@ service cloud.firestore {
       allow update: if isMgr() || (isStaff() && auteurRecent() && request.resource.data.statut == resource.data.statut);
       allow delete: if false;
     }
+    // Base des adhérents · version 1.7 : listes importées, rangées par lots mensuels (lot_AAAA_MM).
+    // Lecture par toute l'équipe ; import et remplacement par le propriétaire ou le responsable portefeuille ; jamais supprimées.
+    match /adherents/{id} {
+      allow read: if canRead();
+      allow create, update: if isMgr() && request.resource.data.lignes is list;
+      allow delete: if false;
+    }
     // Recettes de la Plateforme électronique (PE) · version 1.6 : jamais supprimées ; annulées par le propriétaire ou le responsable portefeuille.
     // Toute personne qui encaisse peut marquer une commande « Livrée » ; l'auteur corrige sa saisie pendant 7 jours.
     match /recettes_pe/{id} {

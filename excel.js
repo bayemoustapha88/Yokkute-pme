@@ -30,7 +30,9 @@ var YKX = (function(){
   /* Lit un export CCIAK (tableau HTML enregistré en .xls) ou le modèle Excel du CADE. */
   function lire(buffer){
     var wb = XLSX.read(buffer, {type:"array", cellDates:true});
-    var feuille = wb.SheetNames.indexOf("Adherents")>=0 ? "Adherents" : wb.SheetNames[0];
+    /* Feuille « Adherents » (modèle Yokkute), sinon la première feuille qui contient une colonne « Matricule » (export CCIAK, classeur de vérification). */
+    function aMatricule(nom){ var r=XLSX.utils.sheet_to_json(wb.Sheets[nom], {header:1, raw:true, defval:""}).slice(0,15); return r.some(function(l){ return l.some(function(c){ return hcle(c)==="MATRICULE"; }); }); }
+    var feuille = wb.SheetNames.indexOf("Adherents")>=0 ? "Adherents" : (wb.SheetNames.filter(aMatricule)[0] || wb.SheetNames[0]);
     var rows = XLSX.utils.sheet_to_json(wb.Sheets[feuille], {header:1, raw:true, defval:""});
     var hi = -1;
     for(var i=0;i<Math.min(rows.length,15);i++){ if(rows[i].some(function(c){ return hcle(c)==="MATRICULE"; })){ hi=i; break; } }

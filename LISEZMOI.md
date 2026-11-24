@@ -75,6 +75,16 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - **Rapports téléchargeables en PDF, en Word (.docx) et en Excel** : Rapports d'activités (mensuel, trimestriel, semestriel, annuel), rapport de la période dans Activités CADE (Tableau de bord ou Pilotage) et arrêté de caisse. Les fichiers sont produits sur l'appareil, sans connexion nécessaire.
 - Nouveaux fichiers : `export.js`, `jspdf.umd.min.js` et `jspdf.plugin.autotable.min.js` (bibliothèque jsPDF, licence MIT). Les règles Firestore ne changent pas.
 
+## Base des adhérents et cohortes du programme (version 1.7)
+
+- Nouvel onglet **Base des adhérents** dans « Activités CADE » : tous les adhérents de la CCIAK, pour le suivi financier des adhésions. On l'alimente en important la liste des adhérents (export CCIAK ou classeur de vérification avec la colonne « Forme juridique »). Un nouvel import **remplace** celui de la même année : on peut réimporter un fichier corrigé sans créer de doublons.
+- Les adhésions importées comptent dans le tableau de bord, l'onglet « Cartes d'adhésion », les relances de renouvellement et les rapports. Elles sont rangées par lots mensuels : une douzaine de lectures au lieu d'une par adhérent, pour rester dans l'offre gratuite de Firebase.
+- **Nouveaux tarifs** : EI et SUARL 3 000 FCFA ; GIE et coopérative 10 000 FCFA ; SARL et SA 10 000 FCFA. Cible indicative : 700 cartes par an (600 EI, 90 GIE, 10 sociétés), dépassable. Les plans enregistrés avec les anciens tarifs d'exemple passent automatiquement aux nouveaux.
+- **Entreprises suivies** : le module Entreprises ne contient plus que les entreprises accompagnées par le programme. Elles sont choisies dans la base des adhérents (« Inscrire au programme », une par une ou par sélection) et rattachées à une **cohorte** annuelle.
+- **Places du programme** : le plan annuel fixe le nombre d'entreprises à suivre (50 par défaut). Au-delà, l'application demande confirmation.
+- **Retirer du suivi** : sur la fiche d'une entreprise, le propriétaire ou le responsable portefeuille peut la retirer du suivi avec un motif. Sa fiche, ses diagnostics et son PDI sont conservés ; elle peut être réintégrée.
+- **Règles Firestore à republier** (nouvelle collection `adherents`).
+
 ## Recettes de la Plateforme électronique, PE (version 1.6)
 
 - Nouvel onglet **Recettes PE** dans « Activités CADE » : chaque prestation numérique encaissée (étiquettes, logo, factures, supports de communication, cartes de visite, visuels pour réseaux sociaux…) est enregistrée avec le client, la quantité, le montant, le mode de paiement, le reçu et l'état de la commande (en cours ou livrée).

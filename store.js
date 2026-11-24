@@ -3,7 +3,7 @@
    Mode local : localStorage, utilisé tant que la configuration Firebase n'est pas renseignée. */
 "use strict";
 (function(){
-  var CFG = window.YK_CONFIG, COLS = ["entreprises","bibliotheque","membres","taches","journal","realisations","adhesions","recettes_pe","cade_param"];
+  var CFG = window.YK_CONFIG, COLS = ["entreprises","bibliotheque","membres","taches","journal","realisations","adhesions","adherents","recettes_pe","cade_param"];
   var DB = { mode:"local", user:null, pending:false, online:navigator.onLine };
   var CHUNK = 700000;
   var listeners = {}, userCbs = [], statusCbs = [];
