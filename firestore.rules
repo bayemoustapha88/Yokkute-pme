@@ -90,6 +90,12 @@ service cloud.firestore {
       allow create, update: if isMgr() && request.resource.data.lignes is list;
       allow delete: if false;
     }
+    // Journal des recettes de la caisse · version 1.8 : PE, prestations et renouvellements repris du fichier Excel de suivi, par lots mensuels.
+    match /recettes_import/{id} {
+      allow read: if canRead();
+      allow create, update: if isMgr() && request.resource.data.lignes is list;
+      allow delete: if false;
+    }
     // Recettes de la Plateforme électronique (PE) · version 1.6 : jamais supprimées ; annulées par le propriétaire ou le responsable portefeuille.
     // Toute personne qui encaisse peut marquer une commande « Livrée » ; l'auteur corrige sa saisie pendant 7 jours.
     match /recettes_pe/{id} {

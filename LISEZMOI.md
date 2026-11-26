@@ -75,6 +75,18 @@ Nouveau rôle **Accueil / caisse** (Équipe et partage) : il enregistre les visi
 - **Rapports téléchargeables en PDF, en Word (.docx) et en Excel** : Rapports d'activités (mensuel, trimestriel, semestriel, annuel), rapport de la période dans Activités CADE (Tableau de bord ou Pilotage) et arrêté de caisse. Les fichiers sont produits sur l'appareil, sans connexion nécessaire.
 - Nouveaux fichiers : `export.js`, `jspdf.umd.min.js` et `jspdf.plugin.autotable.min.js` (bibliothèque jsPDF, licence MIT). Les règles Firestore ne changent pas.
 
+## Import du journal des recettes de la caisse (version 1.8)
+
+- Dans « Activités CADE › Accueil / caisse », le propriétaire ou le responsable portefeuille peut **importer le journal des recettes** tenu dans Excel (classeur organisé, feuille « Journal ») :
+  - les recettes de la **Plateforme électronique** vont dans « Recettes PE », rangées par prestation ;
+  - les **business plans et prestations** (agrément local…) comptent dans « Recettes des prestations du CADE » ; une ligne « 15000*15 » compte 15 business plans ;
+  - les **renouvellements** absents de la liste des adhérents comptent dans les cartes d'adhésion ;
+  - les **adhésions** ne sont pas importées : elles viennent déjà de la liste des adhérents CCIAK.
+- Un nouvel import de la même année **remplace** le précédent. Les lignes importées sont visibles mais non modifiables dans l'application.
+- **Tableau de bord** : nouveau tableau « Recettes propres par mois » (adhésions, renouvellements, PE, BP et prestations).
+- **Catalogue PE** aligné sur les prestations réelles : étiquettes ; cartes de visite et flyers ; grand format (bâches, banderoles, kakémonos, tableaux PVC) ; cartes PVC ; impressions et papeterie ; logo ; visuels réseaux sociaux. Les plans enregistrés avec l'ancien catalogue d'exemple passent automatiquement au nouveau.
+- **Règles Firestore à republier** (nouvelle collection `recettes_import`).
+
 ## Adhésions gratuites des programmes partenaires (version 1.7.1)
 
 - Les adhésions obtenues par l'enrôlement d'un programme partenaire (Nataal Sine Saloum) sont **gratuites** : elles comptent comme adhérents et comme cartes, mais à 0 FCFA dans les recettes.

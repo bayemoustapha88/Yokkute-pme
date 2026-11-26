@@ -1,7 +1,7 @@
-/* Yokkute PME — module « Activités CADE » (version 1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
+/* Yokkute PME — module « Activités CADE » (version 1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
-   Collections Firestore : realisations, adhesions, adherents (lots importés), recettes_pe, cade_param. */
+   Collections Firestore : realisations, adhesions, adherents et recettes_import (lots importés), recettes_pe, cade_param. */
 "use strict";
 (function(){
 var DB = window.YK_DB;
@@ -67,27 +67,37 @@ var PLACES_DEF = 50;
 /* Version 1.7.1 : adhésions gratuites, offertes par l'enrôlement d'un programme partenaire, repérées par le coach. Modifiable dans le plan annuel. */
 var GRATUITES_DEF = {programme:"Nataal Sine Saloum (NSS)", coachs:["Yatte Diagne","Sophie Diack","Mohammeth Dany Niouky Niouky"]};
 /* Plateforme électronique (PE) : catalogue des prestations numériques, tarifs et cibles annuelles d'exemple (modifiables dans le plan annuel). */
+/* Version 1.8 : catalogue aligné sur les prestations réelles de la PE (caisse mars–novembre 2026) ; tarifs moyens et cibles d'exemple, modifiables. */
 var PE_DEF = [
- {code:"ETQ", lib:"Étiquettes et emballages", tarif:15000, cible:40},
- {code:"LOGO", lib:"Logo et identité visuelle", tarif:25000, cible:30},
- {code:"FACT", lib:"Factures, devis et papeterie", tarif:10000, cible:40},
- {code:"COM", lib:"Supports de communication (flyers, affiches, banderoles)", tarif:20000, cible:40},
- {code:"CVIS", lib:"Cartes de visite", tarif:10000, cible:30},
- {code:"RS", lib:"Visuels pour les réseaux sociaux", tarif:15000, cible:20}
+ {code:"ETQ", lib:"Étiquettes et emballages", tarif:7500, cible:50},
+ {code:"CVIS", lib:"Cartes de visite et flyers", tarif:15000, cible:15},
+ {code:"COM", lib:"Grand format (bâches, banderoles, kakémonos, tableaux PVC)", tarif:20000, cible:15},
+ {code:"PVC", lib:"Cartes PVC et impression de cartes", tarif:2000, cible:20},
+ {code:"FACT", lib:"Impressions et papeterie (attestations, factures)", tarif:7500, cible:5},
+ {code:"LOGO", lib:"Logo et identité visuelle", tarif:5000, cible:10},
+ {code:"RS", lib:"Visuels pour les réseaux sociaux", tarif:15000, cible:10}
 ];
+var PE_ANCIEN = "ETQ:15000|LOGO:25000|FACT:10000|COM:20000|CVIS:10000|RS:15000";
+/* Correspondance entre les prestations du journal de caisse et le catalogue PE. */
+function peCodeDe(lib){ var k=cle(lib);
+  if(/ETIQU/.test(k)) return "ETQ"; if(/LOGO/.test(k)) return "LOGO"; if(/VISITE|FLYER|CDV/.test(k)) return "CVIS";
+  if(/BACHE|BANDEROLE|KAKEMONO|TABLEAU|GRAND FORMAT|AFFICHE/.test(k)) return "COM"; if(/PVC|IMPRESSION DE CARTE|IMP CARTE/.test(k)) return "PVC";
+  if(/ATTESTATION|FACTURE|PAPETERIE|DEVIS/.test(k)) return "FACT"; if(/RESEAU|VISUEL/.test(k)) return "RS"; return "AUTRE"; }
 var PE_AUTRE = {code:"AUTRE", lib:"Autre prestation numérique", tarif:0, cible:0};
 var PRESTA_DEF = 10100000, FINANC_DEF = 300000000;
 
 /* ================= Données ================= */
-var REAL = [], ADH = [], ADHDOCS = [], LOTS = [], PE = [], PARAM = {}, ERR = null;
+var REAL = [], ADH = [], ADHDOCS = [], LOTS = [], PE = [], PEDOCS = [], RIMP = [], PARAM = {}, ERR = null;
 function refresh(){ if(APP()) APP().refresh(); }
 DB.listen("realisations", function(d){ REAL=d.map(function(x){ x.id=x.id||x._id; return x; }); ERR=null; refresh(); });
 DB.listen("adhesions", function(d){ ADHDOCS=d.map(function(x){ x.id=x.id||x._id; return x; }); rebuildAdh(); refresh(); });
 /* Version 1.7 : les adhésions importées depuis la liste CCIAK sont rangées par lots mensuels (une douzaine de lectures au lieu d'une par adhérent). */
 DB.listen("adherents", function(d){ LOTS=d.map(function(x){ x.id=x.id||x._id; return x; }); rebuildAdh(); refresh(); });
-DB.listen("recettes_pe", function(d){ PE=d.map(function(x){ x.id=x.id||x._id; return x; }); refresh(); });
-DB.listen("cade_param", function(d){ PARAM={}; d.forEach(function(x){ PARAM[x._id]=x; }); refresh(); });
-DB.listen("_error", function(col, err){ if(["realisations","adhesions","adherents","recettes_pe","cade_param"].indexOf(col)>=0){ ERR=(err && err.code)||"erreur"; refresh(); } });
+DB.listen("recettes_pe", function(d){ PEDOCS=d.map(function(x){ x.id=x.id||x._id; return x; }); rebuildPE(); refresh(); });
+/* Version 1.8 : journal des recettes de la caisse (PE, prestations, renouvellements), importé par lots mensuels. */
+DB.listen("recettes_import", function(d){ RIMP=d.map(function(x){ x.id=x.id||x._id; return x; }); rebuildAdh(); rebuildPE(); refresh(); });
+DB.listen("cade_param", function(d){ PARAM={}; d.forEach(function(x){ PARAM[x._id]=x; }); rebuildAdh(); rebuildPE(); refresh(); });
+DB.listen("_error", function(col, err){ if(["realisations","adhesions","adherents","recettes_import","recettes_pe","cade_param"].indexOf(col)>=0){ ERR=(err && err.code)||"erreur"; refresh(); } });
 
 /* ---- Base des adhérents ---- */
 function normForme(f){ var k=cle(f).replace(/[^A-Z ]/g," ").trim();
@@ -99,6 +109,13 @@ function cleNom(x){ return cle(x).replace(/([A-Z])\1+/g,"$1"); }
 function gratuiteDe(coach, annee){ var k=cleNom(coach); if(!k) return ""; var G=plan(Number(annee)).gratuites||{};
   return (G.coachs||[]).some(function(c){ var g=cleNom(c); return g && (g===k || k.indexOf(g)===0 || g.indexOf(k)===0); }) ? (G.programme||"Programme partenaire") : ""; }
 function montantLigne(l){ var an=String(l.date).slice(0,4); return gratuiteDe(l.coach, an) ? 0 : tarifCat(Number(an), catDeForme(l.forme)); }
+function journalImporte(cat){ var out=[]; RIMP.forEach(function(L){ (L.lignes||[]).forEach(function(l){ if(!cat || l.cat===cat) out.push(l); }); }); return out; }
+function rebuildPE(){
+  PE=PEDOCS.concat(journalImporte("PE").map(function(l){ var c=peCodeDe(l.pres+" "+l.libelle), cat=plan(Number(String(l.date).slice(0,4))).pe.concat([PE_AUTRE]).filter(function(x){ return x.code===c; })[0];
+    return {id:"jr_"+l.n+"_"+l.date, importe:true, date:l.date, entrepriseId:l.mat||"", entrepriseNom:l.client, telephone:"", prestation:c, prestationLib:cat?cat.lib:l.pres, quantite:num(l.quantite)||1,
+      montant:num(l.montant), modePaiement:"", recu:"", description:l.libelle||"", statutCommande:"Livrée", livreLe:l.date, statut:"Valide", auteur:"", creeLe:"", creeMs:0}; }));
+}
+function prestaImportees(){ return journalImporte("Prestations"); }
 function lignesImportees(){ var out=[]; LOTS.forEach(function(L){ (L.lignes||[]).forEach(function(l){ out.push(l); }); }); return out; }
 function rebuildAdh(){
   var deja={}; ADHDOCS.forEach(function(x){ if(x.statut!=="Annulée" && x.matricule) deja[x.matricule+"|"+String(x.date).slice(0,4)]=1; });
@@ -107,7 +124,12 @@ function rebuildAdh(){
     return {id:"imp_"+l.mat+"_"+String(l.date).slice(0,4), importe:true, date:l.date, entrepriseId:"", entrepriseNom:l.nom, matricule:l.mat, categorie:cat, categorieLib:CAT_LIB[cat],
       montant:montantLigne(l), gratuite:gratuiteDe(l.coach, String(l.date).slice(0,4)), nature:(anMat && anMat<Number(String(l.date).slice(0,4))) ? "Renouvellement" : "Nouvelle adhésion", echeance:addDur(l.date,12,"mois"),
       modePaiement:"", recu:"", statut:"Valide", auteur:"", telephone:l.tel||"", forme:l.forme||"", commune:l.commune||"", coach:l.coach||""}; });
-  ADH=ADHDOCS.concat(imp);
+  /* Renouvellements du journal de caisse absents de la liste CCIAK (une ligne déjà dans la liste n'est pas comptée deux fois). */
+  var vuMat={}; imp.concat(ADHDOCS).forEach(function(x){ if(x.matricule && x.statut!=="Annulée") vuMat[x.matricule+"|"+String(x.date).slice(0,4)]=1; });
+  var ren=journalImporte("Renouvellement").filter(function(l){ return !(l.mat && vuMat[l.mat+"|"+String(l.date).slice(0,4)]); }).map(function(l){ var cat=catDeForme(l.statut);
+    return {id:"jr_"+l.n+"_"+l.date, importe:true, journal:true, date:l.date, entrepriseId:"", entrepriseNom:l.client, matricule:l.mat||"", categorie:cat, categorieLib:CAT_LIB[cat], montant:num(l.montant),
+      nature:"Renouvellement", echeance:addDur(l.date,12,"mois"), modePaiement:"", recu:"", statut:"Valide", auteur:"", telephone:"", forme:l.statut||"", gratuite:""}; });
+  ADH=ADHDOCS.concat(imp, ren);
 }
 /* Une ligne par adhérent et par année : liste importée + cartes vendues dans l'application. */
 function baseRows(annee){
@@ -131,7 +153,7 @@ function typeOf(code, t){ if(/^Masterclass \(MC1 à MC1\d\)$/.test(t||"")) t="Ma
 function plan(annee){
   var p=PARAM["annee_"+annee], cib={};
   INDIC.forEach(function(i){ cib[i.id]=(p && p.cibles && p.cibles[i.id]!=null) ? Number(p.cibles[i.id]) : i.def; });
-  return {annee:annee, existe:!!p, cibles:cib, cartes:(p && p.cartes && p.cartes.map(function(c){ return c.code+":"+c.tarif; }).join("|")!==CARTES_ANCIENNES) ? p.cartes : JSON.parse(JSON.stringify(CARTES_DEF)), places:(p && p.places!=null) ? num(p.places) : PLACES_DEF, gratuites:(p && p.gratuites) || JSON.parse(JSON.stringify(GRATUITES_DEF)), pe:(p && p.pe) || JSON.parse(JSON.stringify(PE_DEF)),
+  return {annee:annee, existe:!!p, cibles:cib, cartes:(p && p.cartes && p.cartes.map(function(c){ return c.code+":"+c.tarif; }).join("|")!==CARTES_ANCIENNES) ? p.cartes : JSON.parse(JSON.stringify(CARTES_DEF)), places:(p && p.places!=null) ? num(p.places) : PLACES_DEF, gratuites:(p && p.gratuites) || JSON.parse(JSON.stringify(GRATUITES_DEF)), pe:(p && p.pe && p.pe.map(function(c){ return c.code+":"+c.tarif; }).join("|")!==PE_ANCIEN) ? p.pe : JSON.parse(JSON.stringify(PE_DEF)),
     prestations:(p && p.prestations!=null) ? Number(p.prestations) : PRESTA_DEF, financements:(p && p.financements!=null) ? Number(p.financements) : FINANC_DEF,
     majLe:p && p.majLe, majPar:p && p.majPar};
 }
@@ -206,7 +228,8 @@ function calc(per){
   out.cartesGrat=A.filter(function(x){ return x.gratuite; }).length;
   var Q=valides(PE).filter(function(x){ return inP(x.date); });
   out.peNb=Q.length; out.pe=somme(Q); out.peQte=Q.reduce(function(s,x){ return s+(num(x.quantite)||1); },0);
-  out.presta=R.reduce(function(s,r){ return s+num(r.montant); },0);
+  out.prestaJ=prestaImportees().filter(function(l){ return inP(l.date); });
+  out.presta=R.reduce(function(s,r){ return s+num(r.montant); },0)+out.prestaJ.reduce(function(s,l){ return s+num(l.montant); },0);
   out.financ=R.reduce(function(s,r){ return s+num(r.montantObtenu); },0);
   out.demande=R.reduce(function(s,r){ return s+num(r.montantDemande); },0);
   out.parAuteur={}; R.forEach(function(r){ out.parAuteur[r.auteur]=(out.parAuteur[r.auteur]||0)+1; });
@@ -281,10 +304,11 @@ function vTableau(){
   h+='<section class="card"><div class="row between"><h2>Objectifs financiers · '+esc(P.label)+'</h2><span class="small muted">Période écoulée : '+Math.round(ec*100)+' %</span></div><div class="grid g4">'+
     fin("Recettes des cartes d'adhésion", K.cartes, cibleCartes(Pl), K.cartesNb+" carte(s), dont "+K.cartesNouv+" nouvelle(s) adhésion(s)"+(K.cartesGrat?" et "+K.cartesGrat+" gratuite(s) (programme partenaire)":""))+
     fin("Recettes de la Plateforme électronique (PE)", K.pe, ciblePE(Pl), K.peNb+" recette(s) · étiquettes, logos, factures, supports…")+
-    fin("Recettes des prestations du CADE", K.presta, Pl.prestations, "Montants encaissés saisis dans le journal")+
+    fin("Recettes des prestations du CADE", K.presta, Pl.prestations, "Business plans et prestations encaissés"+(K.prestaJ.length?" · dont "+K.prestaJ.length+" opération(s) du journal de caisse":""))+
     fin("Financements obtenus par les entreprises", K.financ, Pl.financements, "Montant demandé : "+ent(K.demande)+" FCFA")+'</div>'+
     '<p class="small muted">Total des recettes propres (cartes + PE + prestations) : <b>'+ent(K.cartes+K.pe+K.presta)+' FCFA</b> sur une cible de '+ent((cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)+' FCFA pour la période ('+(pct(K.cartes+K.pe+K.presta,(cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)==null?"—":pct(K.cartes+K.pe+K.presta,(cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)+" %")+').</p></section>';
 
+  h+=recettesParMois(Number(String(P.debut).slice(0,4)));
   h+='<section class="card"><h2>Prévu et réalisé par axe de la fiche de poste</h2><div class="tablewrap"><table><thead><tr><th>Axe</th><th>Indicateur</th><th class="num">Réalisé</th><th class="num">Cible</th><th>Taux</th></tr></thead><tbody>';
   INDIC.forEach(function(i){ var r=K.ind[i.id], c=Math.round(Pl.cibles[i.id]*part*10)/10, t=pct(r,c);
     h+='<tr><td><span class="tag">'+i.axe+'</span></td><td>'+esc(i.lib)+(i.src!=="real"?' <span class="small muted">(auto)</span>':'')+'</td><td class="num"><b>'+ent(r)+'</b></td><td class="num">'+nf(c)+'</td><td><div class="row" style="flex-wrap:nowrap;gap:8px">'+barre(t)+'<b class="small num" style="color:'+couleur(t)+';min-width:44px">'+(t==null?"—":t+" %")+'</b></div></td></tr>'; });
@@ -302,8 +326,8 @@ function vTableau(){
   h+='</section></div>';
 
   var fil=REAL.map(function(r){ return {d:r.creeLe||r.date, txt:'<span class="tag">'+r.axe+'</span> '+esc(r.type)+(r.entrepriseNom?' · '+esc(r.entrepriseNom):''), a:r.auteur, j:r.date}; })
-    .concat(ADH.map(function(x){ return {d:x.creeLe||x.date, txt:'<span class="tag">Carte</span> '+esc(x.nature||"")+' · '+esc(x.entrepriseNom)+' · '+ent(num(x.montant))+' FCFA', a:x.auteur, j:x.date}; }))
-    .concat(valides(PE).map(function(x){ return {d:x.creeLe||x.date, txt:'<span class="tag">PE</span> '+esc(x.prestationLib||"")+' · '+esc(x.entrepriseNom)+' · '+ent(num(x.montant))+' FCFA', a:x.auteur, j:x.date}; }))
+    .concat(ADH.filter(function(x){ return !x.importe; }).map(function(x){ return {d:x.creeLe||x.date, txt:'<span class="tag">Carte</span> '+esc(x.nature||"")+' · '+esc(x.entrepriseNom)+' · '+ent(num(x.montant))+' FCFA', a:x.auteur, j:x.date}; }))
+    .concat(valides(PE).filter(function(x){ return !x.importe; }).map(function(x){ return {d:x.creeLe||x.date, txt:'<span class="tag">PE</span> '+esc(x.prestationLib||"")+' · '+esc(x.entrepriseNom)+' · '+ent(num(x.montant))+' FCFA', a:x.auteur, j:x.date}; }))
     .sort(function(a,b){ return a.d<b.d?1:-1; }).slice(0,10);
   h+='<section class="card"><h2>Dernières activités de l\'équipe</h2>';
   if(!fil.length) h+='<p class="empty">Rien pour l\'instant. Les activités apparaissent ici dès leur saisie.</p>';
@@ -453,6 +477,81 @@ function vCartes(){
         (!an && canEditDoc(x)?'<button class="btn sm ghost" data-act="c_aedit" data-id="'+esc(x.id)+'">Modifier</button>':'')+(!an && isMgr()?'<button class="btn sm ghost danger" data-act="c_aannul" data-id="'+esc(x.id)+'">Annuler</button>':'')+'</td></tr>';
       if(C.annuler===x.id) h+='<tr><td colspan="7"><div class="confirm"><label class="f">Motif de l\'annulation (obligatoire)<input type="text" id="c_motif" placeholder="Ex. : erreur de saisie, doublon, remboursement"></label><div class="row"><button class="btn sm ghost" data-act="c_aannulno">Retour</button><button class="btn sm danger" data-act="c_aannulok" data-id="'+esc(x.id)+'">Confirmer l\'annulation</button></div></div></td></tr>'; });
     h+='</tbody></table></div><p class="small muted">Une recette ne se supprime pas : le propriétaire ou le responsable portefeuille l\'annule avec un motif, et la ligne reste visible pour la traçabilité.</p>'; }
+  return h+'</section>';
+}
+
+/* ================= Version 1.8 : recettes propres par mois et import du journal de caisse ================= */
+function recettesParMois(y){
+  var mo=[], tot={adh:0, ren:0, pe:0, pr:0}, an=String(y);
+  for(var m=1;m<=12;m++){ var k=an+"-"+String(m).padStart(2,"0"), inM=function(d){ return String(d||"").slice(0,7)===k; };
+    var A=ADH.filter(function(x){ return x.statut!=="Annulée" && inM(x.date); });
+    var r={m:m, adh:somme(A.filter(function(x){ return x.nature!=="Renouvellement"; })), ren:somme(A.filter(function(x){ return x.nature==="Renouvellement"; })),
+      pe:somme(valides(PE).filter(function(x){ return inM(x.date); })),
+      pr:REAL.filter(function(x){ return inM(x.date); }).reduce(function(s,x){ return s+num(x.montant); },0)+prestaImportees().filter(function(l){ return inM(l.date); }).reduce(function(s,l){ return s+num(l.montant); },0)};
+    r.t=r.adh+r.ren+r.pe+r.pr; ["adh","ren","pe","pr"].forEach(function(c){ tot[c]+=r[c]; }); mo.push(r); }
+  var T=tot.adh+tot.ren+tot.pe+tot.pr; if(!T) return "";
+  var h='<section class="card"><div class="row between"><h2>Recettes propres '+an+' par mois</h2><span class="small muted">Adhésions de la liste CCIAK, caisse du CADE et saisies de l\'application</span></div><div class="tablewrap"><table><thead><tr><th>Mois</th><th class="num">Adhésions</th><th class="num">Renouvellements</th><th class="num">Plateforme électronique</th><th class="num">BP et prestations</th><th class="num">Total</th></tr></thead><tbody>';
+  mo.forEach(function(r){ if(!r.t) return; h+='<tr><td>'+MOISN[r.m-1]+'</td><td class="num">'+ent(r.adh)+'</td><td class="num">'+ent(r.ren)+'</td><td class="num">'+ent(r.pe)+'</td><td class="num">'+ent(r.pr)+'</td><td class="num"><b>'+ent(r.t)+'</b></td></tr>'; });
+  h+='<tr><td><b>Total</b></td><td class="num"><b>'+ent(tot.adh)+'</b></td><td class="num"><b>'+ent(tot.ren)+'</b></td><td class="num"><b>'+ent(tot.pe)+'</b></td><td class="num"><b>'+ent(tot.pr)+'</b></td><td class="num"><b>'+ent(T)+'</b></td></tr>';
+  h+='<tr><td class="small muted">Part</td>'+["adh","ren","pe","pr"].map(function(c){ return '<td class="num small muted">'+Math.round(tot[c]/T*100)+' %</td>'; }).join("")+'<td></td></tr></tbody></table></div></section>';
+  return h;
+}
+function lireJournal(buf, nomFichier){
+  var wb=XLSX.read(buf, {type:"array", cellDates:true}), feuille=null, rows=null, hi=-1;
+  wb.SheetNames.forEach(function(n){ if(feuille) return; var r=XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:""});
+    for(var i=0;i<Math.min(r.length,10);i++){ var ks=r[i].map(function(c){ return cle(c); }); if(ks.indexOf("CATEGORIE")>=0 && ks.some(function(k){ return k.indexOf("MONTANT")===0; })){ feuille=n; rows=r; hi=i; break; } } });
+  if(!feuille){ toast("Feuille « Journal » introuvable : utilisez le classeur Suivi_recettes_CADE organisé (colonnes Catégorie et Montant)."); return; }
+  var H=rows[hi].map(function(c){ return cle(c); }), col=function(){ for(var a=0;a<arguments.length;a++){ var k=H.indexOf(arguments[a]); if(k>=0) return k; } for(var b=0;b<arguments.length;b++){ for(var z=0;z<H.length;z++) if(H[z].indexOf(arguments[b])===0) return z; } return -1; };
+  var cD=col("DATE"), cM=col("N MOIS","NO MOIS"), cC=col("CLIENT"), cS=col("STATUT JURIDIQUE"), cK=col("CATEGORIE"), cP=col("PRESTATION"), cL=col("LIBELLE D ORIGINE","LIBELLE"), cT=col("MONTANT FCFA","MONTANT"), cO=col("COACH"), cX=col("MATRICULE CCIAK RETROUVE","MATRICULE");
+  var L=[], ign={adh:0, aut:0}, corr=0, sansDate=0;
+  rows.slice(hi+1).forEach(function(r, i){
+    var k=cle(r[cK]), mt=num(r[cT]); if(!k || !mt) return;
+    var cat=/^PLATEFORME|^PE$/.test(k)?"PE":/^PRESTATION|^BP|BUSINESS/.test(k)?"Prestations":/^RENOUVEL/.test(k)?"Renouvellement":/^ADHESION/.test(k)?"Adhésion":"";
+    if(cat==="Adhésion"){ ign.adh++; return; } if(!cat){ ign.aut++; return; }
+    var d=r[cD], ds=""; if(d instanceof Date) ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); else { var mm=String(d||"").match(/(\d{1,2})\D+(\d{1,2})\D+(\d{4})/); if(mm) ds=mm[3]+"-"+mm[2].padStart(2,"0")+"-"+mm[1].padStart(2,"0"); }
+    var nm=cM>=0?Number(r[cM]):0; if(!ds){ if(!nm){ sansDate++; return; } ds="2026-"+String(nm).padStart(2,"0")+"-28"; corr++; }
+    if(nm && Number(ds.slice(5,7))!==nm){ var jj=Math.min(Number(ds.slice(8,10)),28); ds=ds.slice(0,4)+"-"+String(nm).padStart(2,"0")+"-"+String(jj).padStart(2,"0"); corr++; }
+    var lib=String(cL>=0?r[cL]:"").trim(), q=lib.match(/(\d+)\s*[*x×]\s*(\d+)\s*$/i), mat=String(cX>=0?r[cX]:"").trim();
+    L.push({n:i+1, date:ds, client:String(r[cC]||"").trim(), statut:String(cS>=0?r[cS]:"").trim(), cat:cat, pres:String(cP>=0?r[cP]:"").trim(), libelle:lib, montant:mt,
+      quantite:q?Number(q[2]):1, coach:String(cO>=0?r[cO]:"").trim(), mat:/^[A-Z]{2}\d{10}$/.test(mat)?mat:""});
+  });
+  if(!L.length){ toast("Aucune recette PE, prestation ou renouvellement dans ce fichier."); return; }
+  var mois={}, an={}; L.forEach(function(l){ var k=l.date.slice(0,7); an[l.date.slice(0,4)]=1; var m=mois[k]||(mois[k]={k:k, lab:MOISN[Number(k.slice(5,7))-1]+" "+k.slice(0,4), PE:0, Prestations:0, Renouvellement:0}); m[l.cat]+=l.montant; });
+  var ans=Object.keys(an).sort();
+  C.jimp={fichier:nomFichier, feuille:feuille, lignes:L, mois:Object.keys(mois).sort().map(function(k){ return mois[k]; }), ign:ign, corr:corr, sansDate:sansDate, annees:ans,
+    renDeja:L.filter(function(l){ return l.cat==="Renouvellement" && l.mat; }).length, remplace:journalImporte().filter(function(l){ return ans.indexOf(String(l.date).slice(0,4))>=0; }).length};
+  APP().render(); window.scrollTo(0,0);
+}
+function vJournalImport(){
+  var I=C.jimp, t=function(c){ return I.lignes.filter(function(l){ return l.cat===c; }); }, sm=function(L){ return L.reduce(function(s,l){ return s+l.montant; },0); };
+  var h='<section class="editor"><h3 class="full">Aperçu de l\'import du journal des recettes · '+esc(I.fichier)+' (feuille « '+esc(I.feuille)+' »)</h3>';
+  h+='<div class="full tablewrap"><table><thead><tr><th>Mois</th><th class="num">Plateforme électronique</th><th class="num">BP et prestations</th><th class="num">Renouvellements</th></tr></thead><tbody>'+
+    I.mois.map(function(m){ return '<tr><td>'+esc(m.lab)+'</td><td class="num">'+ent(m.PE)+'</td><td class="num">'+ent(m.Prestations)+'</td><td class="num">'+ent(m.Renouvellement)+'</td></tr>'; }).join("")+
+    '<tr><td><b>Total</b></td><td class="num"><b>'+ent(sm(t("PE")))+'</b></td><td class="num"><b>'+ent(sm(t("Prestations")))+'</b></td><td class="num"><b>'+ent(sm(t("Renouvellement")))+'</b></td></tr></tbody></table></div>';
+  h+='<ul class="full small"><li>'+t("PE").length+' recette(s) PE, rangées dans le catalogue de la Plateforme électronique.</li><li>'+t("Prestations").length+' prestation(s) (business plans, agrément local), comptées dans « Recettes des prestations du CADE ».</li>'+
+    '<li>'+t("Renouvellement").length+' renouvellement(s)'+(I.renDeja?', dont '+I.renDeja+' déjà présent(s) dans la liste des adhérents : non comptés deux fois':'')+'.</li>'+
+    (I.ign.adh?'<li>'+I.ign.adh+' adhésion(s) non importée(s) : elles viennent déjà de la liste des adhérents CCIAK.</li>':'')+
+    (I.corr?'<li>'+I.corr+' date(s) ramenée(s) dans le mois de la feuille d\'origine.</li>':'')+(I.sansDate?'<li class="ko">'+I.sansDate+' ligne(s) sans date ignorée(s).</li>':'')+
+    (I.remplace?'<li><b>Cet import remplace</b> les '+I.remplace+' ligne(s) déjà importées pour '+I.annees.join(", ")+'.</li>':'')+'</ul>';
+  h+='<div class="full row between"><button class="btn ghost" data-act="c_jimpno">Annuler</button><button class="btn primary" data-act="c_jimpok">Importer ces '+I.lignes.length+' recettes</button></div></section>';
+  return h;
+}
+function importerJournal(){
+  var I=C.jimp, lots={}, at=new Date().toISOString();
+  I.lignes.forEach(function(l){ var k="lot_"+l.date.slice(0,4)+"_"+l.date.slice(5,7); (lots[k]=lots[k]||[]).push(l); });
+  RIMP.forEach(function(L){ if(I.annees.indexOf(String(L.annee))>=0 && !lots[L.id] && (L.lignes||[]).length) lots[L.id]=[]; });
+  Object.keys(lots).forEach(function(k){ var pr=k.split("_"); DB.save("recettes_import", k, {annee:Number(pr[1]), mois:Number(pr[2]), lignes:lots[k], fichier:I.fichier, importLe:at, importPar:ME().email}); });
+  var tot=I.lignes.reduce(function(s,l){ return s+l.montant; },0);
+  APP().journal("recette_pe", null, "Import du journal des recettes ("+I.fichier+") : "+I.lignes.length+" recette(s), "+money(tot));
+  toast(I.lignes.length+" recette(s) importée(s)."); C.jimp=null; APP().render();
+}
+function vJournalBloc(){
+  if(!isMgr()) return "";
+  var J=journalImporte(), sm=function(c){ return J.filter(function(l){ return l.cat===c; }).reduce(function(s,l){ return s+num(l.montant); },0); };
+  var h='<section class="card"><div class="row between"><h2>Journal des recettes de la caisse (import)</h2><label class="btn file-btn">Importer le journal des recettes<input type="file" id="c_jfile" accept=".xls,.xlsx"></label></div>'+
+    '<p class="small muted">Pour reprendre les recettes déjà notées dans le fichier Excel de suivi : Plateforme électronique, business plans et prestations, renouvellements. Utilisez le classeur organisé (feuille « Journal »). Un nouvel import de la même année remplace le précédent.</p>';
+  if(C.jimp) h+=vJournalImport();
+  if(J.length) h+='<p class="small">Déjà importé : '+J.length+' recette(s) · PE '+ent(sm("PE"))+' FCFA · prestations '+ent(sm("Prestations"))+' FCFA · renouvellements '+ent(sm("Renouvellement"))+' FCFA.</p>';
   return h+'</section>';
 }
 
@@ -722,7 +821,7 @@ function vPE(){
   else { h+='<div class="tablewrap"><table><thead><tr><th>Date</th><th>Client</th><th class="hide-sm">Prestation</th><th class="num">Qté</th><th class="num">Montant</th><th class="hide-sm">Reçu</th><th></th></tr></thead><tbody>';
     A.sort(function(a,b){ return a.date<b.date?1:-1; }).forEach(function(x){ var an=x.statut==="Annulée";
       h+='<tr style="'+(an?"opacity:.55;text-decoration:line-through":"")+'"><td>'+fd(x.date)+'</td><td>'+esc(x.entrepriseNom)+'<div class="small muted">'+esc(x.statutCommande||"")+(x.description?' · '+esc(x.description):'')+' · '+esc(APP().court(x.auteur))+(an?' · annulée : '+esc(x.motifAnnulation||""):'')+'</div></td><td class="hide-sm">'+esc(x.prestationLib||x.prestation)+'</td><td class="num">'+(num(x.quantite)||1)+'</td><td class="num">'+ent(num(x.montant))+'</td><td class="hide-sm">'+esc(x.recu||"—")+'</td><td>'+
-        (!an && canEditPE(x)?'<button class="btn sm ghost" data-act="c_peedit" data-id="'+esc(x.id)+'">Modifier</button>':'')+(!an && isMgr()?'<button class="btn sm ghost danger" data-act="c_peannul" data-id="'+esc(x.id)+'">Annuler</button>':'')+'</td></tr>';
+        (!an && !x.importe && canEditPE(x)?'<button class="btn sm ghost" data-act="c_peedit" data-id="'+esc(x.id)+'">Modifier</button>':'')+(!an && !x.importe && isMgr()?'<button class="btn sm ghost danger" data-act="c_peannul" data-id="'+esc(x.id)+'">Annuler</button>':'')+'</td></tr>';
       if(C.annuler===x.id) h+='<tr><td colspan="7"><div class="confirm"><label class="f">Motif de l\'annulation (obligatoire)<input type="text" id="c_motif" placeholder="Ex. : erreur de saisie, doublon, remboursement"></label><div class="row"><button class="btn sm ghost" data-act="c_aannulno">Retour</button><button class="btn sm danger" data-act="c_peannulok" data-id="'+esc(x.id)+'">Confirmer l\'annulation</button></div></div></td></tr>'; });
     h+='</tbody></table></div><p class="small muted">Une recette ne se supprime pas : le propriétaire ou le responsable portefeuille l\'annule avec un motif. L\'auteur peut la corriger pendant 7 jours.</p>'; }
   return h+'</section>';
@@ -820,7 +919,7 @@ function vCaisse(){
   var c=C.caisse, me=ME().email, voirTous=c.tous && (isMgr() || role()==="lecteur");
   var R=REAL.filter(function(r){ return r.date===c.date && num(r.montant)>0 && (voirTous || r.auteur===me); }).map(function(r){ return {h:r.creeLe, nat:r.type, ent:r.entrepriseNom, mode:r.modePaiement, recu:r.recu, mt:num(r.montant), a:r.auteur}; });
   var A=ADH.filter(function(x){ return !x.importe && x.date===c.date && x.statut!=="Annulée" && (voirTous || x.auteur===me); }).map(function(x){ return {h:x.creeLe, nat:"Carte · "+(x.nature||""), ent:x.entrepriseNom, mode:x.modePaiement, recu:x.recu, mt:num(x.montant), a:x.auteur}; });
-  var Q=valides(PE).filter(function(x){ return x.date===c.date && (voirTous || x.auteur===me); }).map(function(x){ return {h:x.creeLe, nat:"PE · "+(x.prestationLib||""), ent:x.entrepriseNom, mode:x.modePaiement, recu:x.recu, mt:num(x.montant), a:x.auteur}; });
+  var Q=valides(PE).filter(function(x){ return !x.importe && x.date===c.date && (voirTous || x.auteur===me); }).map(function(x){ return {h:x.creeLe, nat:"PE · "+(x.prestationLib||""), ent:x.entrepriseNom, mode:x.modePaiement, recu:x.recu, mt:num(x.montant), a:x.auteur}; });
   var L=R.concat(A, Q).sort(function(a,b){ return (a.h||"")<(b.h||"")?-1:1; }), tot=L.reduce(function(s2,x){ return s2+x.mt; },0), parMode={};
   L.forEach(function(x){ var m=x.mode||"Non précisé"; parMode[m]=(parMode[m]||0)+x.mt; });
   var vis=REAL.filter(function(r){ return r.date===c.date && r.axe==="A1" && (voirTous || r.auteur===me); }).length;
@@ -828,6 +927,7 @@ function vCaisse(){
   if(canSaisir()) bq.push('<button class="btn primary" style="padding:18px" data-act="c_qvisit">+ Enregistrer un visiteur</button>','<button class="btn primary" style="padding:18px" data-act="c_qcarte" data-r="caisse">+ Vendre ou renouveler une carte</button>');
   bq.push('<button class="btn primary" style="padding:18px" data-act="c_qpe" data-r="caisse">+ Recette Plateforme électronique (PE)</button>');
   var h='<div class="grid g'+bq.length+'">'+bq.join("")+'</div>';
+  h+=vJournalBloc();
   h+='<section class="card"><div class="row between"><h2>Arrêté de caisse</h2><div class="row"><input type="date" id="c_cdate" value="'+esc(c.date)+'" max="'+TODAY+'" style="width:auto">'+
     ((isMgr()||role()==="lecteur")?'<select id="c_ctous" style="width:auto"><option value="1"'+(c.tous?" selected":"")+'>Toute l\'équipe</option><option value="0"'+(!c.tous?" selected":"")+'>Mes encaissements</option></select>':'')+
     '<button class="btn sm ghost" data-act="c_cprint">Imprimer</button><button class="btn sm" data-act="c_cpdf">PDF</button><button class="btn sm" data-act="c_cdoc">Word</button></div></div>';
@@ -943,7 +1043,7 @@ function view(){
   if(C.tab==="plan") return h+vPlan();
   return h+rulesWarn()+vTableau();
 }
-function editing(){ return !!(C.form || C.adh || C.pe || C.planEdit || C.ntype || C.annuler || C.bimp); }
+function editing(){ return !!(C.form || C.adh || C.pe || C.planEdit || C.ntype || C.annuler || C.bimp || C.jimp); }
 
 function click(t, a){
   var id=t.getAttribute("data-id");
@@ -953,6 +1053,8 @@ function click(t, a){
   if(a==="c_qvisit"){ C.form=nouvelleReal(); C.form.axe="A1"; C.form.type="Accueil d'un visiteur"; C.form.retour="caisse"; C.tab="journal"; APP().go("cade"); return; }
   if(a==="c_qcarte"){ C.adh=nouvelleAdh(); C.adh.retour=t.getAttribute("data-r"); C.tab="cartes"; APP().go("cade"); return; }
   if(a==="c_bimpno"){ C.bimp=null; APP().render(); return; }
+  if(a==="c_jimpno"){ C.jimp=null; APP().render(); return; }
+  if(a==="c_jimpok"){ importerJournal(); return; }
   if(a==="c_bimpok"){ importerBase(); return; }
   if(a==="c_bins"){ inscrire([id]); return; }
   if(a==="c_binsel"){ inscrire(Object.keys(C.bsel||{}).filter(function(k){ return C.bsel[k]; })); return; }
@@ -1030,6 +1132,7 @@ function change(t){
   var id=t.id||"";
   if(id==="c_ptype"){ C.per.type=t.value; C.per.idx=t.value==="mois"?Number(TODAY.slice(5,7)):t.value==="trimestre"?Math.ceil(Number(TODAY.slice(5,7))/3):t.value==="semestre"?(Number(TODAY.slice(5,7))<=6?1:2):1; APP().render(); return true; }
   if(id==="c_pidx"){ C.per.idx=Number(t.value); APP().render(); return true; }
+  if(id==="c_jfile" && t.files && t.files[0]){ var jf=t.files[0], jr=new FileReader(); jr.onload=function(){ try{ lireJournal(new Uint8Array(jr.result), jf.name); }catch(err){ console.error(err); toast("Lecture du fichier impossible : "+err.message); } }; jr.readAsArrayBuffer(jf); t.value=""; return true; }
   if(id==="c_bfile" && t.files && t.files[0]){ var bf=t.files[0], rd=new FileReader(); rd.onload=function(){ try{ lireBase(new Uint8Array(rd.result), bf.name); }catch(err){ console.error(err); toast("Lecture du fichier impossible : "+err.message); } }; rd.readAsArrayBuffer(bf); t.value=""; return true; }
   if(id==="c_byear"){ C.baseAn=Number(t.value); C.bsel={}; C.bn=100; APP().render(); return true; }
   if(id==="c_bcoh"){ C.bcoh=t.value; APP().render(); return true; }
