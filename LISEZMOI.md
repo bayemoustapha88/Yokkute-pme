@@ -132,3 +132,12 @@ Les repères en wolof, la bibliothèque d'actions, les réponses proposées dans
 - Les business plans repris du journal de caisse comptent désormais dans l'indicateur I05.
 - Boutons rapides : « + Saisir une prestation » (tableau de bord) et « + Prestation CADE (BP, agrément, FRA) » (caisse).
 - Aucune nouvelle règle Firestore.
+
+## Journal des recettes à remplir et importer (versions 1.9 et 1.9.1)
+- Nouveau classeur « Journal des recettes » (modèle vide : Modele_Journal_des_recettes_CADE.xlsx, lien dans Activités CADE → Caisse). Une ligne par recette, listes déroulantes, colonne Contrôle, récapitulatifs mensuels et par prestation.
+- À l'import, chaque recette va dans sa section : Adhésion et Renouvellement → Adhésions et cartes ; Plateforme électronique (PE) → catalogue PE ; Prestation de service CADE → Prestations de service (business plan, agrément local, dossier FRA, dossier de crédit…).
+- Les adhésions du journal sont désormais reprises, sauf si l'adhérent est déjà dans la liste CCIAK (même matricule ou même nom, même année).
+- Quantité, mode de paiement et n° de reçu sont lus. Les dossiers FRA ne sont plus confondus avec l'agrément local ; les dossiers de crédit comptent dans l'indicateur I05.
+- Version 1.9.1 : le classeur a une feuille par mois (Janvier à Décembre) ; l'application lit les 12 feuilles en un seul import. L'année se règle dans la feuille « Paramètres » : le même modèle sert pour 2027, 2028, etc.
+- Un fichier = une année entière : le réimport d'une même année remplace le précédent.
+- Aucune nouvelle règle Firestore.

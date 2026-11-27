@@ -1,5 +1,5 @@
 /* Yokkute PME — cache hors ligne de l'application. Changez VERSION à chaque mise à jour publiée. */
-var VERSION = "yokkute-v1.8.1";
+var VERSION = "yokkute-v1.9.1";
 var FICHIERS = ["./", "index.html", "manifest.webmanifest", "app.css",
   "config.js", "referentiel.js", "store.js", "excel.js", "jspdf.umd.min.js", "jspdf.plugin.autotable.min.js", "export.js", "cade.js", "app.js",
   "firebase-app-compat.js", "firebase-auth-compat.js", "firebase-firestore-compat.js", "xlsx.full.min.js",

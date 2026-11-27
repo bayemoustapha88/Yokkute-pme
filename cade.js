@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.8.1 : prestations de service par type, clients hors suivi ; v1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
+/* Yokkute PME — module « Activités CADE » (version 1.9.1 : journal des recettes à une feuille par mois, réutilisable chaque année, chaque recette dans sa section ; v1.8.1 : prestations de service par type, clients hors suivi ; v1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, adherents et recettes_import (lots importés), recettes_pe, cade_param. */
@@ -113,10 +113,15 @@ function journalImporte(cat){ var out=[]; RIMP.forEach(function(L){ (L.lignes||[
 function rebuildPE(){
   PE=PEDOCS.concat(journalImporte("PE").map(function(l){ var c=peCodeDe(l.pres+" "+l.libelle), cat=plan(Number(String(l.date).slice(0,4))).pe.concat([PE_AUTRE]).filter(function(x){ return x.code===c; })[0];
     return {id:"jr_"+l.n+"_"+l.date, importe:true, date:l.date, entrepriseId:l.mat||"", entrepriseNom:l.client, telephone:"", prestation:c, prestationLib:cat?cat.lib:l.pres, quantite:num(l.quantite)||1,
-      montant:num(l.montant), modePaiement:"", recu:"", description:l.libelle||"", statutCommande:"Livrée", livreLe:l.date, statut:"Valide", auteur:"", creeLe:"", creeMs:0}; }));
+      montant:num(l.montant), modePaiement:l.mode||"", recu:l.recu||"", description:l.libelle||"", statutCommande:"Livrée", livreLe:l.date, statut:"Valide", auteur:"", creeLe:"", creeMs:0}; }));
 }
+function prestaTypeDe(p){ var k=" "+cle(p).replace(/[^A-Z ]/g," ")+" ";
+  if(/ FRA /.test(k)) return "Dossier d'agrément FRA"; if(/BUSINESS| BP /.test(k)) return "Business plan"; if(/AGREMENT|AGREEMENT/.test(k)) return "Agrément local";
+  if(/CREDIT/.test(k)) return "Dossier de crédit"; if(/FORMALIS/.test(k)) return "Appui à la formalisation"; if(/CONSEIL/.test(k)) return "Conseil approfondi (forfait)"; if(/FORMATION/.test(k)) return "Formation payante";
+  return String(p||"").trim() || "Autre prestation"; }
 function prestaImportees(){ return journalImporte("Prestations"); }
 function lignesImportees(){ var out=[]; LOTS.forEach(function(L){ (L.lignes||[]).forEach(function(l){ out.push(l); }); }); return out; }
+function journalDejaAdh(l, vuMat, vuNom){ var a=String(l.date).slice(0,4), k=cleNom(l.client); return !!((l.mat && vuMat[l.mat+"|"+a]) || (k && vuNom[k+"|"+a])); }
 function rebuildAdh(){
   var deja={}; ADHDOCS.forEach(function(x){ if(x.statut!=="Annulée" && x.matricule) deja[x.matricule+"|"+String(x.date).slice(0,4)]=1; });
   var imp=lignesImportees().filter(function(l){ return l.mat && l.date && !deja[l.mat+"|"+String(l.date).slice(0,4)]; }).map(function(l){
@@ -125,10 +130,11 @@ function rebuildAdh(){
       montant:montantLigne(l), gratuite:gratuiteDe(l.coach, String(l.date).slice(0,4)), nature:(anMat && anMat<Number(String(l.date).slice(0,4))) ? "Renouvellement" : "Nouvelle adhésion", echeance:addDur(l.date,12,"mois"),
       modePaiement:"", recu:"", statut:"Valide", auteur:"", telephone:l.tel||"", forme:l.forme||"", commune:l.commune||"", coach:l.coach||""}; });
   /* Renouvellements du journal de caisse absents de la liste CCIAK (une ligne déjà dans la liste n'est pas comptée deux fois). */
-  var vuMat={}; imp.concat(ADHDOCS).forEach(function(x){ if(x.matricule && x.statut!=="Annulée") vuMat[x.matricule+"|"+String(x.date).slice(0,4)]=1; });
-  var ren=journalImporte("Renouvellement").filter(function(l){ return !(l.mat && vuMat[l.mat+"|"+String(l.date).slice(0,4)]); }).map(function(l){ var cat=catDeForme(l.statut);
+  /* Version 1.9 : les adhésions du journal des recettes sont aussi reprises, sauf si l'adhérent figure déjà (matricule ou nom) dans la liste CCIAK ou dans les ventes. */
+  var vuMat={}, vuNom={}; imp.concat(ADHDOCS).forEach(function(x){ if(x.statut==="Annulée") return; var a=String(x.date).slice(0,4); if(x.matricule) vuMat[x.matricule+"|"+a]=1; var k=cleNom(x.entrepriseNom); if(k) vuNom[k+"|"+a]=1; });
+  var ren=journalImporte().filter(function(l){ return l.cat==="Renouvellement" || l.cat==="Adhésion"; }).filter(function(l){ return !journalDejaAdh(l, vuMat, vuNom); }).map(function(l){ var cat=catDeForme(l.statut);
     return {id:"jr_"+l.n+"_"+l.date, importe:true, journal:true, date:l.date, entrepriseId:"", entrepriseNom:l.client, matricule:l.mat||"", categorie:cat, categorieLib:CAT_LIB[cat], montant:num(l.montant),
-      nature:"Renouvellement", echeance:addDur(l.date,12,"mois"), modePaiement:"", recu:"", statut:"Valide", auteur:"", telephone:"", forme:l.statut||"", gratuite:""}; });
+      nature:l.cat==="Adhésion"?"Nouvelle adhésion":"Renouvellement", echeance:addDur(l.date,12,"mois"), modePaiement:l.mode||"", recu:l.recu||"", statut:"Valide", auteur:"", telephone:"", forme:l.statut||"", gratuite:""}; });
   ADH=ADHDOCS.concat(imp, ren);
 }
 /* Une ligne par adhérent et par année : liste importée + cartes vendues dans l'application. */
@@ -221,7 +227,7 @@ function calc(per){
       if(r.axe!==i.axe) return; if(!i.tout && (i.types||[]).indexOf(r.type)<0) return;
       v += i.mesure==="participants" ? num(r.participants) : 1; });
     /* Business plans repris du journal de caisse (une ligne « 15000*15 » compte 15 business plans). */
-    if(i.id==="I05") prestaImportees().forEach(function(l){ if(inP(l.date) && /BUSINESS/.test(cle(l.pres))) v += num(l.quantite)||1; });
+    if(i.id==="I05") prestaImportees().forEach(function(l){ var ty=prestaTypeDe(l.pres); if(inP(l.date) && (ty==="Business plan" || ty==="Dossier de crédit")) v += num(l.quantite)||1; });
     out.ind[i.id]=v;
   });
   var A=ADH.filter(function(x){ return x.statut!=="Annulée" && inP(x.date); });
@@ -232,7 +238,7 @@ function calc(per){
   out.peNb=Q.length; out.pe=somme(Q); out.peQte=Q.reduce(function(s,x){ return s+(num(x.quantite)||1); },0);
   out.prestaJ=prestaImportees().filter(function(l){ return inP(l.date); });
   var pt={}; R.forEach(function(r){ if(num(r.montant)>0){ var k=r.type||"Autre prestation"; var o=pt[k]||(pt[k]={type:k, n:0, mt:0}); o.n++; o.mt+=num(r.montant); } });
-  out.prestaJ.forEach(function(l){ var k=/BUSINESS/.test(cle(l.pres))?"Business plan":/AGREMENT|AGREEMENT/.test(cle(l.pres))?"Agrément local":/FRA/.test(cle(l.pres))?"Dossier d'agrément FRA":(l.pres||"Autre prestation");
+  out.prestaJ.forEach(function(l){ var k=prestaTypeDe(l.pres);
     var o=pt[k]||(pt[k]={type:k, n:0, mt:0}); o.n+=num(l.quantite)||1; o.mt+=num(l.montant); });
   out.prestaParType=Object.keys(pt).map(function(k){ return pt[k]; }).sort(function(a,b){ return b.mt-a.mt; });
   out.presta=R.reduce(function(s,r){ return s+num(r.montant); },0)+out.prestaJ.reduce(function(s,l){ return s+num(l.montant); },0);
@@ -516,40 +522,50 @@ function recettesParMois(y){
   return h;
 }
 function lireJournal(buf, nomFichier){
-  var wb=XLSX.read(buf, {type:"array", cellDates:true}), feuille=null, rows=null, hi=-1;
-  wb.SheetNames.forEach(function(n){ if(feuille) return; var r=XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:""});
-    for(var i=0;i<Math.min(r.length,10);i++){ var ks=r[i].map(function(c){ return cle(c); }); if(ks.indexOf("CATEGORIE")>=0 && ks.some(function(k){ return k.indexOf("MONTANT")===0; })){ feuille=n; rows=r; hi=i; break; } } });
-  if(!feuille){ toast("Feuille « Journal » introuvable : utilisez le classeur Suivi_recettes_CADE organisé (colonnes Catégorie et Montant)."); return; }
+  /* Version 1.9.1 : toutes les feuilles qui ont les colonnes Catégorie et Montant sont lues (classeur à une feuille par mois, ou feuille unique). */
+  var wb=XLSX.read(buf, {type:"array", cellDates:true}), feuilles=[];
+  wb.SheetNames.forEach(function(n){ var r=XLSX.utils.sheet_to_json(wb.Sheets[n], {header:1, raw:true, defval:""});
+    for(var i=0;i<Math.min(r.length,10);i++){ var ks=r[i].map(function(c){ return cle(c); }); if(ks.indexOf("CATEGORIE")>=0 && ks.some(function(k){ return k.indexOf("MONTANT")===0; })){ feuilles.push({n:n, rows:r, hi:i}); break; } } });
+  /* Classeur mensuel : seules les feuilles Janvier…Décembre ; sinon (ancien classeur organisé) la première feuille trouvée, pour ne pas compter deux fois les feuilles de contrôle. */
+  var fm=feuilles.filter(function(F){ return MOISN.some(function(m){ return cle(m)===cle(F.n); }); });
+  feuilles=fm.length ? fm : feuilles.slice(0,1);
+  if(!feuilles.length){ toast("Aucune feuille de recettes trouvée : utilisez le classeur « Journal des recettes » (colonnes Catégorie et Montant)."); return; }
+  var L=[], ign={adh:0, aut:0}, corr=0, sansDate=0, seq=0;
+  feuilles.forEach(function(F){ var rows=F.rows, hi=F.hi;
   var H=rows[hi].map(function(c){ return cle(c); }), col=function(){ for(var a=0;a<arguments.length;a++){ var k=H.indexOf(arguments[a]); if(k>=0) return k; } for(var b=0;b<arguments.length;b++){ for(var z=0;z<H.length;z++) if(H[z].indexOf(arguments[b])===0) return z; } return -1; };
-  var cD=col("DATE"), cM=col("N MOIS","NO MOIS"), cC=col("CLIENT"), cS=col("STATUT JURIDIQUE"), cK=col("CATEGORIE"), cP=col("PRESTATION"), cL=col("LIBELLE D ORIGINE","LIBELLE"), cT=col("MONTANT FCFA","MONTANT"), cO=col("COACH"), cX=col("MATRICULE CCIAK RETROUVE","MATRICULE");
-  var L=[], ign={adh:0, aut:0}, corr=0, sansDate=0;
+  var cD=col("DATE"), cM=col("N MOIS","NO MOIS"), cC=col("CLIENT"), cS=col("STATUT JURIDIQUE"), cK=col("CATEGORIE"), cP=col("PRESTATION"), cL=col("LIBELLE D ORIGINE","LIBELLE"), cT=col("MONTANT FCFA","MONTANT"), cO=col("COACH"), cX=col("MATRICULE CCIAK RETROUVE","MATRICULE"), cQ=col("QUANTITE","QTE"), cMo=col("MODE DE PAIEMENT","MODE"), cR=col("N RECU","NO RECU","RECU");
   rows.slice(hi+1).forEach(function(r, i){
     var k=cle(r[cK]), mt=num(r[cT]); if(!k || !mt) return;
     var cat=/^PLATEFORME|^PE$/.test(k)?"PE":/^PRESTATION|^BP|BUSINESS/.test(k)?"Prestations":/^RENOUVEL/.test(k)?"Renouvellement":/^ADHESION/.test(k)?"Adhésion":"";
-    if(cat==="Adhésion"){ ign.adh++; return; } if(!cat){ ign.aut++; return; }
+    if(!cat){ ign.aut++; return; }
     var d=r[cD], ds=""; if(d instanceof Date) ds=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); else { var mm=String(d||"").match(/(\d{1,2})\D+(\d{1,2})\D+(\d{4})/); if(mm) ds=mm[3]+"-"+mm[2].padStart(2,"0")+"-"+mm[1].padStart(2,"0"); }
     var nm=cM>=0?Number(r[cM]):0; if(!ds){ if(!nm){ sansDate++; return; } ds="2026-"+String(nm).padStart(2,"0")+"-28"; corr++; }
     if(nm && Number(ds.slice(5,7))!==nm){ var jj=Math.min(Number(ds.slice(8,10)),28); ds=ds.slice(0,4)+"-"+String(nm).padStart(2,"0")+"-"+String(jj).padStart(2,"0"); corr++; }
     var lib=String(cL>=0?r[cL]:"").trim(), q=lib.match(/(\d+)\s*[*x×]\s*(\d+)\s*$/i), mat=String(cX>=0?r[cX]:"").trim();
-    L.push({n:i+1, date:ds, client:String(r[cC]||"").trim(), statut:String(cS>=0?r[cS]:"").trim(), cat:cat, pres:String(cP>=0?r[cP]:"").trim(), libelle:lib, montant:mt,
-      quantite:q?Number(q[2]):1, coach:String(cO>=0?r[cO]:"").trim(), mat:/^[A-Z]{2}\d{10}$/.test(mat)?mat:""});
+    seq++; L.push({n:seq, feuille:F.n, date:ds, client:String(r[cC]||"").trim(), statut:String(cS>=0?r[cS]:"").trim(), cat:cat, pres:String(cP>=0?r[cP]:"").trim(), libelle:lib, montant:mt,
+      quantite:(cQ>=0 && num(r[cQ])>0)?num(r[cQ]):q?Number(q[2]):1, coach:String(cO>=0?r[cO]:"").trim(), mat:/^[A-Z]{2}\d{10}$/.test(mat.toUpperCase())?mat.toUpperCase():"",
+      mode:String(cMo>=0?r[cMo]:"").trim(), recu:String(cR>=0?r[cR]:"").trim()});
   });
-  if(!L.length){ toast("Aucune recette PE, prestation ou renouvellement dans ce fichier."); return; }
-  var mois={}, an={}; L.forEach(function(l){ var k=l.date.slice(0,7); an[l.date.slice(0,4)]=1; var m=mois[k]||(mois[k]={k:k, lab:MOISN[Number(k.slice(5,7))-1]+" "+k.slice(0,4), PE:0, Prestations:0, Renouvellement:0}); m[l.cat]+=l.montant; });
+  });
+  if(!L.length){ toast("Aucune recette (adhésion, renouvellement, PE ou prestation) dans ce fichier."); return; }
+  var mois={}, an={}; L.forEach(function(l){ var k=l.date.slice(0,7); an[l.date.slice(0,4)]=1; var m=mois[k]||(mois[k]={k:k, lab:MOISN[Number(k.slice(5,7))-1]+" "+k.slice(0,4), PE:0, Prestations:0, Renouvellement:0, "Adhésion":0}); m[l.cat]+=l.montant; });
+  var vuMat={}, vuNom={}; ADHDOCS.concat(lignesImportees().map(function(x){ return {matricule:x.mat, entrepriseNom:x.nom, date:x.date}; })).forEach(function(x){ if(x.statut==="Annulée") return; var a=String(x.date).slice(0,4); if(x.matricule) vuMat[x.matricule+"|"+a]=1; var k=cleNom(x.entrepriseNom); if(k) vuNom[k+"|"+a]=1; });
+  var dejaA=L.filter(function(l){ return (l.cat==="Adhésion"||l.cat==="Renouvellement") && journalDejaAdh(l, vuMat, vuNom); });
   var ans=Object.keys(an).sort();
-  C.jimp={fichier:nomFichier, feuille:feuille, lignes:L, mois:Object.keys(mois).sort().map(function(k){ return mois[k]; }), ign:ign, corr:corr, sansDate:sansDate, annees:ans,
-    renDeja:L.filter(function(l){ return l.cat==="Renouvellement" && l.mat; }).length, remplace:journalImporte().filter(function(l){ return ans.indexOf(String(l.date).slice(0,4))>=0; }).length};
+  C.jimp={fichier:nomFichier, feuille:feuilles.length>1?feuilles.length+" feuilles : "+feuilles.map(function(F){ return F.n; }).join(", "):feuilles[0].n, lignes:L, mois:Object.keys(mois).sort().map(function(k){ return mois[k]; }), ign:ign, corr:corr, sansDate:sansDate, annees:ans,
+    renDeja:dejaA.length, nouvA:L.filter(function(l){ return l.cat==="Adhésion" || l.cat==="Renouvellement"; }).length-dejaA.length,
+    nouvAmt:L.filter(function(l){ return (l.cat==="Adhésion"||l.cat==="Renouvellement") && dejaA.indexOf(l)<0; }).reduce(function(s,l){ return s+l.montant; },0), remplace:journalImporte().filter(function(l){ return ans.indexOf(String(l.date).slice(0,4))>=0; }).length};
   APP().render(); window.scrollTo(0,0);
 }
 function vJournalImport(){
   var I=C.jimp, t=function(c){ return I.lignes.filter(function(l){ return l.cat===c; }); }, sm=function(L){ return L.reduce(function(s,l){ return s+l.montant; },0); };
-  var h='<section class="editor"><h3 class="full">Aperçu de l\'import du journal des recettes · '+esc(I.fichier)+' (feuille « '+esc(I.feuille)+' »)</h3>';
-  h+='<div class="full tablewrap"><table><thead><tr><th>Mois</th><th class="num">Plateforme électronique</th><th class="num">BP et prestations</th><th class="num">Renouvellements</th></tr></thead><tbody>'+
-    I.mois.map(function(m){ return '<tr><td>'+esc(m.lab)+'</td><td class="num">'+ent(m.PE)+'</td><td class="num">'+ent(m.Prestations)+'</td><td class="num">'+ent(m.Renouvellement)+'</td></tr>'; }).join("")+
-    '<tr><td><b>Total</b></td><td class="num"><b>'+ent(sm(t("PE")))+'</b></td><td class="num"><b>'+ent(sm(t("Prestations")))+'</b></td><td class="num"><b>'+ent(sm(t("Renouvellement")))+'</b></td></tr></tbody></table></div>';
-  h+='<ul class="full small"><li>'+t("PE").length+' recette(s) PE, rangées dans le catalogue de la Plateforme électronique.</li><li>'+t("Prestations").length+' prestation(s) (business plans, agrément local), comptées dans « Recettes des prestations du CADE ».</li>'+
-    '<li>'+t("Renouvellement").length+' renouvellement(s)'+(I.renDeja?', dont '+I.renDeja+' déjà présent(s) dans la liste des adhérents : non comptés deux fois':'')+'.</li>'+
-    (I.ign.adh?'<li>'+I.ign.adh+' adhésion(s) non importée(s) : elles viennent déjà de la liste des adhérents CCIAK.</li>':'')+
+  var h='<section class="editor"><h3 class="full">Aperçu de l\'import du journal des recettes · '+esc(I.fichier)+' (« '+esc(I.feuille)+' »)</h3>';
+  h+='<div class="full tablewrap"><table><thead><tr><th>Mois</th><th class="num">Adhésions</th><th class="num">Renouvellements</th><th class="num">Plateforme électronique</th><th class="num">Prestations de service</th></tr></thead><tbody>'+
+    I.mois.map(function(m){ return '<tr><td>'+esc(m.lab)+'</td><td class="num">'+ent(m["Adhésion"])+'</td><td class="num">'+ent(m.Renouvellement)+'</td><td class="num">'+ent(m.PE)+'</td><td class="num">'+ent(m.Prestations)+'</td></tr>'; }).join("")+
+    '<tr><td><b>Total</b></td><td class="num"><b>'+ent(sm(t("Adhésion")))+'</b></td><td class="num"><b>'+ent(sm(t("Renouvellement")))+'</b></td><td class="num"><b>'+ent(sm(t("PE")))+'</b></td><td class="num"><b>'+ent(sm(t("Prestations")))+'</b></td></tr></tbody></table></div>';
+  h+='<ul class="full small"><li>'+t("PE").length+' recette(s) de la Plateforme électronique, rangées dans le catalogue de la Plateforme électronique.</li><li>'+t("Prestations").length+' prestation(s) (business plans, agréments, FRA…), comptées dans « Prestations de service du CADE ».</li>'+
+    '<li>'+(t("Adhésion").length+t("Renouvellement").length)+' adhésion(s) et renouvellement(s) → section Adhésions et cartes. '+(I.renDeja?I.renDeja+' déjà dans la liste des adhérents CCIAK (même matricule ou même nom) : non comptées deux fois. ':'')+
+      (I.nouvA?'<b>'+I.nouvA+' absente(s) de la liste</b> : ajoutées aux cartes ('+ent(I.nouvAmt)+' FCFA). Indiquez le matricule CCIAK quand il est connu pour éviter un double compte.':'')+'</li>'+
     (I.corr?'<li>'+I.corr+' date(s) ramenée(s) dans le mois de la feuille d\'origine.</li>':'')+(I.sansDate?'<li class="ko">'+I.sansDate+' ligne(s) sans date ignorée(s).</li>':'')+
     (I.remplace?'<li><b>Cet import remplace</b> les '+I.remplace+' ligne(s) déjà importées pour '+I.annees.join(", ")+'.</li>':'')+'</ul>';
   h+='<div class="full row between"><button class="btn ghost" data-act="c_jimpno">Annuler</button><button class="btn primary" data-act="c_jimpok">Importer ces '+I.lignes.length+' recettes</button></div></section>';
@@ -568,7 +584,7 @@ function vJournalBloc(){
   if(!isMgr()) return "";
   var J=journalImporte(), sm=function(c){ return J.filter(function(l){ return l.cat===c; }).reduce(function(s,l){ return s+num(l.montant); },0); };
   var h='<section class="card"><div class="row between"><h2>Journal des recettes de la caisse (import)</h2><label class="btn file-btn">Importer le journal des recettes<input type="file" id="c_jfile" accept=".xls,.xlsx"></label></div>'+
-    '<p class="small muted">Pour reprendre les recettes déjà notées dans le fichier Excel de suivi : Plateforme électronique, business plans et prestations, renouvellements. Utilisez le classeur organisé (feuille « Journal »). Un nouvel import de la même année remplace le précédent.</p>';
+    '<p class="small muted">Remplissez le classeur « Journal des recettes » (une ligne par recette : adhésion, renouvellement, Plateforme électronique, prestation de service) puis importez-le : chaque recette va dans sa section. Le fichier couvre toute l\'année : complétez toujours le même fichier, un nouvel import de la même année remplace le précédent. <a href="Modele_Journal_des_recettes_CADE.xlsx" download>Télécharger le modèle vide</a>.</p>';
   if(C.jimp) h+=vJournalImport();
   if(J.length) h+='<p class="small">Déjà importé : '+J.length+' recette(s) · PE '+ent(sm("PE"))+' FCFA · prestations '+ent(sm("Prestations"))+' FCFA · renouvellements '+ent(sm("Renouvellement"))+' FCFA.</p>';
   return h+'</section>';
