@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
+/* Yokkute PME — module « Activités CADE » (version 1.8.1 : prestations de service par type, clients hors suivi ; v1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, adherents et recettes_import (lots importés), recettes_pe, cade_param. */
@@ -23,7 +23,7 @@ var AXES = [
  {code:"A2", lib:"Plans d'accompagnement individualisés", ent:"oui", note:"Les PDI validés sont comptés automatiquement depuis le module PDI.",
   types:[{t:"Préparation d'un PDI"},{t:"Restitution du PDI au promoteur"},{t:"Révision d'un PDI"}]},
  {code:"A3", lib:"Conseil en gestion, organisation et financement", ent:"oui",
-  types:[{t:"Séance de conseil en gestion ou organisation"},{t:"Conseil en financement"},{t:"Business plan",m:1},{t:"Dossier de crédit",m:1},{t:"Appui à la formalisation",m:1},{t:"Conseil approfondi (forfait)",m:1}]},
+  types:[{t:"Séance de conseil en gestion ou organisation"},{t:"Conseil en financement"},{t:"Business plan",m:1},{t:"Dossier de crédit",m:1},{t:"Agrément local",m:1},{t:"Dossier d'agrément FRA",m:1},{t:"Appui à la formalisation",m:1},{t:"Conseil approfondi (forfait)",m:1}]},
  {code:"A4", lib:"Formations ciblées", ent:"option",
   types:[{t:"Session de formation",p:1,m:1},{t:"Masterclass (MC1 à MC11)",p:1,m:1},{t:"Atelier ou sensibilisation",p:1}]},
  {code:"A5", lib:"Opportunités de financement et de partenariat", ent:"option",
@@ -220,6 +220,8 @@ function calc(per){
     if(i.src==="real" || i.src==="visite") R.forEach(function(r){
       if(r.axe!==i.axe) return; if(!i.tout && (i.types||[]).indexOf(r.type)<0) return;
       v += i.mesure==="participants" ? num(r.participants) : 1; });
+    /* Business plans repris du journal de caisse (une ligne « 15000*15 » compte 15 business plans). */
+    if(i.id==="I05") prestaImportees().forEach(function(l){ if(inP(l.date) && /BUSINESS/.test(cle(l.pres))) v += num(l.quantite)||1; });
     out.ind[i.id]=v;
   });
   var A=ADH.filter(function(x){ return x.statut!=="Annulée" && inP(x.date); });
@@ -229,6 +231,10 @@ function calc(per){
   var Q=valides(PE).filter(function(x){ return inP(x.date); });
   out.peNb=Q.length; out.pe=somme(Q); out.peQte=Q.reduce(function(s,x){ return s+(num(x.quantite)||1); },0);
   out.prestaJ=prestaImportees().filter(function(l){ return inP(l.date); });
+  var pt={}; R.forEach(function(r){ if(num(r.montant)>0){ var k=r.type||"Autre prestation"; var o=pt[k]||(pt[k]={type:k, n:0, mt:0}); o.n++; o.mt+=num(r.montant); } });
+  out.prestaJ.forEach(function(l){ var k=/BUSINESS/.test(cle(l.pres))?"Business plan":/AGREMENT|AGREEMENT/.test(cle(l.pres))?"Agrément local":/FRA/.test(cle(l.pres))?"Dossier d'agrément FRA":(l.pres||"Autre prestation");
+    var o=pt[k]||(pt[k]={type:k, n:0, mt:0}); o.n+=num(l.quantite)||1; o.mt+=num(l.montant); });
+  out.prestaParType=Object.keys(pt).map(function(k){ return pt[k]; }).sort(function(a,b){ return b.mt-a.mt; });
   out.presta=R.reduce(function(s,r){ return s+num(r.montant); },0)+out.prestaJ.reduce(function(s,l){ return s+num(l.montant); },0);
   out.financ=R.reduce(function(s,r){ return s+num(r.montantObtenu); },0);
   out.demande=R.reduce(function(s,r){ return s+num(r.montantDemande); },0);
@@ -308,6 +314,7 @@ function vTableau(){
     fin("Financements obtenus par les entreprises", K.financ, Pl.financements, "Montant demandé : "+ent(K.demande)+" FCFA")+'</div>'+
     '<p class="small muted">Total des recettes propres (cartes + PE + prestations) : <b>'+ent(K.cartes+K.pe+K.presta)+' FCFA</b> sur une cible de '+ent((cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)+' FCFA pour la période ('+(pct(K.cartes+K.pe+K.presta,(cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)==null?"—":pct(K.cartes+K.pe+K.presta,(cibleCartes(Pl)+ciblePE(Pl)+Pl.prestations)*part)+" %")+').</p></section>';
 
+  h+=vPrestaTypes(K, P);
   h+=recettesParMois(Number(String(P.debut).slice(0,4)));
   h+='<section class="card"><h2>Prévu et réalisé par axe de la fiche de poste</h2><div class="tablewrap"><table><thead><tr><th>Axe</th><th>Indicateur</th><th class="num">Réalisé</th><th class="num">Cible</th><th>Taux</th></tr></thead><tbody>';
   INDIC.forEach(function(i){ var r=K.ind[i.id], c=Math.round(Pl.cibles[i.id]*part*10)/10, t=pct(r,c);
@@ -344,7 +351,8 @@ function vForm(){
     '<label class="f">Axe de la fiche de poste<select id="cf_axe">'+axesSaisissables().map(function(x){ return '<option value="'+x.code+'"'+(f.axe===x.code?" selected":"")+'>'+x.code+' · '+esc(x.lib)+'</option>'; }).join("")+'</select></label>'+
     '<label class="f full">Type d\'action<select id="cf_type">'+typesOf(f.axe).map(function(x){ return '<option'+(f.type===x.t?" selected":"")+'>'+esc(x.t)+'</option>'; }).join("")+'</select></label>';
   if(a.note) h+='<p class="small muted full">'+esc(a.note)+'</p>';
-  if(a.ent!=="non") h+='<label class="f full">Entreprise concernée'+(a.ent==="oui"?' (obligatoire)':' (facultatif)')+'<input type="text" id="cf_ent" list="c_ents" value="'+esc(f.entTxt)+'" placeholder="Tapez le nom ou le matricule, puis choisissez dans la liste" autocomplete="off"></label>'+entList();
+  /* Version 1.8.1 : une prestation payante (BP, agrément, FRA…) peut concerner une entreprise suivie, un adhérent de la base ou un autre client. */
+  if(a.ent!=="non") h+='<label class="f full">'+(ty.m?'Client (entreprise suivie, adhérent ou autre client)':'Entreprise concernée')+(a.ent==="oui"?' (obligatoire)':' (facultatif)')+'<input type="text" id="cf_ent" list="'+(ty.m?'c_adhs':'c_ents')+'" value="'+esc(f.entTxt)+'" placeholder="'+(ty.m?'Choisissez dans la liste ou tapez le nom du client':'Tapez le nom ou le matricule, puis choisissez dans la liste')+'" autocomplete="off"></label>'+(ty.m?adhList():entList());
   if(ty.p) h+='<label class="f">Nombre de participants<input type="number" min="0" id="cf_part" value="'+esc(f.participants)+'"></label><label class="f">Dont femmes<input type="number" min="0" id="cf_fem" value="'+esc(f.femmes)+'"></label>';
   if(ty.m) h+='<label class="f">Montant encaissé (FCFA, 0 si gratuit)<input type="number" min="0" step="500" id="cf_mt" value="'+esc(f.montant)+'"></label>'+
     '<label class="f">Mode de paiement<select id="cf_mode">'+MODES.map(function(x){ return '<option'+(f.mode===x?" selected":"")+'>'+x+'</option>'; }).join("")+'</select></label>'+
@@ -360,11 +368,12 @@ function saveForm(){
   var f=C.form, a=axe(f.axe), ty=typeOf(f.axe, f.type), e=null;
   if(!f.date || f.date>TODAY){ toast("Indiquez une date qui n'est pas dans le futur."); return; }
   if(a.ent!=="non" && String(f.entTxt).trim()){ e=entFromText(f.entTxt); }
-  if(a.ent==="oui" && !e){ toast("Choisissez l'entreprise dans la liste proposée (axe "+a.code+")."); return; }
+  var cli=(!e && ty.m) ? (baseFromText(f.entTxt) || (String(f.entTxt||"").trim()?{mat:"", nom:String(f.entTxt).trim()}:null)) : null;
+  if(a.ent==="oui" && !e && !cli){ toast(ty.m?"Indiquez le client de la prestation.":"Choisissez l'entreprise dans la liste proposée (axe "+a.code+")."); return; }
   if(ty.p && num(f.femmes)>num(f.participants)){ toast("Le nombre de femmes dépasse le nombre de participants."); return; }
   if(ty.f && num(f.montantObtenu)>0 && num(f.montantDemande)>0 && num(f.montantObtenu)>num(f.montantDemande)){ toast("Le montant obtenu dépasse le montant demandé : vérifiez."); return; }
   var old=f.id ? REAL.filter(function(r){ return r.id===f.id; })[0] : null;
-  var doc={date:f.date, axe:f.axe, type:f.type, entrepriseId:e?e.id:"", entrepriseNom:e?e.nom:(a.ent==="option"?String(f.entTxt||"").trim():""),
+  var doc={date:f.date, axe:f.axe, type:f.type, entrepriseId:e?e.id:"", entrepriseNom:e?e.nom:cli?cli.nom:(a.ent==="option"?String(f.entTxt||"").trim():""), matricule:e?e.id:(cli&&cli.mat)||"",
     participants:ty.p?num(f.participants):null, femmes:ty.p?num(f.femmes):null,
     montant:ty.m?num(f.montant):null, modePaiement:ty.m?f.mode:"", recu:ty.m?String(f.recu||"").trim():"",
     institution:ty.f?f.institution:"", montantDemande:ty.f?num(f.montantDemande):null, montantObtenu:ty.f?num(f.montantObtenu):null,
@@ -481,6 +490,16 @@ function vCartes(){
 }
 
 /* ================= Version 1.8 : recettes propres par mois et import du journal de caisse ================= */
+function vPrestaTypes(K, P){
+  var L=K.prestaParType||[]; if(!L.length && !isConsLike()) return "";
+  var h='<section class="card"><div class="row between"><h2>Prestations de service du CADE · '+esc(P.label)+'</h2>'+(isConsLike()?'<button class="btn sm primary" data-act="c_qpresta" data-r="tableau">+ Saisir une prestation</button>':'')+'</div>';
+  if(!L.length) h+='<p class="empty">Aucune prestation encaissée sur la période. Saisissez un business plan, un agrément local ou un dossier FRA avec son montant.</p>';
+  else h+='<div class="tablewrap"><table><thead><tr><th>Prestation</th><th class="num">Nombre</th><th class="num">Montant encaissé (FCFA)</th><th class="num">Part</th></tr></thead><tbody>'+
+    L.map(function(o){ return '<tr><td>'+esc(o.type)+'</td><td class="num">'+ent(o.n)+'</td><td class="num">'+ent(o.mt)+'</td><td class="num">'+(K.presta?Math.round(o.mt/K.presta*100):0)+' %</td></tr>'; }).join("")+
+    '<tr><td><b>Total</b></td><td class="num"><b>'+ent(L.reduce(function(s,o){ return s+o.n; },0))+'</b></td><td class="num"><b>'+ent(K.presta)+'</b></td><td></td></tr></tbody></table></div>'+
+    '<p class="small muted">Business plans, agréments (local, FRA), dossiers de crédit, formations payantes et conseil au forfait : saisies du journal des activités avec un montant, et lignes reprises du journal de caisse.</p>';
+  return h+'</section>';
+}
 function recettesParMois(y){
   var mo=[], tot={adh:0, ren:0, pe:0, pr:0}, an=String(y);
   for(var m=1;m<=12;m++){ var k=an+"-"+String(m).padStart(2,"0"), inM=function(d){ return String(d||"").slice(0,7)===k; };
@@ -926,6 +945,7 @@ function vCaisse(){
   var bq=[];
   if(canSaisir()) bq.push('<button class="btn primary" style="padding:18px" data-act="c_qvisit">+ Enregistrer un visiteur</button>','<button class="btn primary" style="padding:18px" data-act="c_qcarte" data-r="caisse">+ Vendre ou renouveler une carte</button>');
   bq.push('<button class="btn primary" style="padding:18px" data-act="c_qpe" data-r="caisse">+ Recette Plateforme électronique (PE)</button>');
+  if(isConsLike()) bq.push('<button class="btn primary" style="padding:18px" data-act="c_qpresta" data-r="caisse">+ Prestation CADE (BP, agrément, FRA)</button>');
   var h='<div class="grid g'+bq.length+'">'+bq.join("")+'</div>';
   h+=vJournalBloc();
   h+='<section class="card"><div class="row between"><h2>Arrêté de caisse</h2><div class="row"><input type="date" id="c_cdate" value="'+esc(c.date)+'" max="'+TODAY+'" style="width:auto">'+
@@ -1050,6 +1070,7 @@ function click(t, a){
   if(a==="c_tab"){ C.tab=t.getAttribute("data-v"); C.form=null; C.adh=null; C.pe=null; C.planEdit=null; C.ntype=null; C.annuler=null; APP().render(); window.scrollTo(0,0); return; }
   if(a==="c_fnew"){ C.form=nouvelleReal(); APP().render(); return; }
   if(a==="c_qreal"){ C.form=nouvelleReal(); C.form.retour=t.getAttribute("data-r"); C.tab="journal"; APP().go("cade"); return; }
+  if(a==="c_qpresta"){ C.form=nouvelleReal(); C.form.axe="A3"; C.form.type="Business plan"; C.form.retour=t.getAttribute("data-r")||"caisse"; C.tab="journal"; APP().go("cade"); return; }
   if(a==="c_qvisit"){ C.form=nouvelleReal(); C.form.axe="A1"; C.form.type="Accueil d'un visiteur"; C.form.retour="caisse"; C.tab="journal"; APP().go("cade"); return; }
   if(a==="c_qcarte"){ C.adh=nouvelleAdh(); C.adh.retour=t.getAttribute("data-r"); C.tab="cartes"; APP().go("cade"); return; }
   if(a==="c_bimpno"){ C.bimp=null; APP().render(); return; }

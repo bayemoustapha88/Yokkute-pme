@@ -124,3 +124,11 @@ Remplacez les fichiers dans le dépôt GitHub et changez `VERSION` en haut de `s
 
 ## À valider avant usage généralisé
 Les repères en wolof, la bibliothèque d'actions, les réponses proposées dans le formulaire de diagnostic, le rattachement des communes de Ndiébel et Keur Madiabel.
+
+## Prestations de service au tableau de bord (version 1.8.1)
+- Le tableau de bord « Activités CADE » affiche une nouvelle section « Prestations de service du CADE » : nombre et montant par type (Business plan, Agrément local, Dossier d'agrément FRA, Dossier de crédit, Appui à la formalisation, Conseil au forfait), y compris les lignes reprises du journal de caisse.
+- Nouveaux types de prestation dans l'axe A3 : « Agrément local », « Dossier d'agrément FRA », « Appui à la formalisation », « Conseil approfondi (forfait) ».
+- Une prestation payante peut concerner une entreprise suivie, un adhérent de la base ou tout autre client (nom libre).
+- Les business plans repris du journal de caisse comptent désormais dans l'indicateur I05.
+- Boutons rapides : « + Saisir une prestation » (tableau de bord) et « + Prestation CADE (BP, agrément, FRA) » (caisse).
+- Aucune nouvelle règle Firestore.
