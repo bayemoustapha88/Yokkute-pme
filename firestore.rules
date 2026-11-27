@@ -84,16 +84,17 @@ service cloud.firestore {
       allow delete: if false;
     }
     // Base des adhérents · version 1.7 : listes importées, rangées par lots mensuels (lot_AAAA_MM).
-    // Lecture par toute l'équipe ; import et remplacement par le propriétaire ou le responsable portefeuille ; jamais supprimées.
+    // Lecture par toute l'équipe ; import et remplacement par le propriétaire, le responsable portefeuille ou un conseiller (version 1.9.2) ; jamais supprimées.
     match /adherents/{id} {
       allow read: if canRead();
-      allow create, update: if isMgr() && request.resource.data.lignes is list;
+      allow create, update: if (isMgr() || isConseiller()) && request.resource.data.lignes is list;
       allow delete: if false;
     }
     // Journal des recettes de la caisse · version 1.8 : PE, prestations et renouvellements repris du fichier Excel de suivi, par lots mensuels.
+    // Version 1.9.2 : import et remplacement aussi par les conseillers.
     match /recettes_import/{id} {
       allow read: if canRead();
-      allow create, update: if isMgr() && request.resource.data.lignes is list;
+      allow create, update: if (isMgr() || isConseiller()) && request.resource.data.lignes is list;
       allow delete: if false;
     }
     // Recettes de la Plateforme électronique (PE) · version 1.6 : jamais supprimées ; annulées par le propriétaire ou le responsable portefeuille.
@@ -107,10 +108,10 @@ service cloud.firestore {
                     || ((isStaff() || isPE()) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['statutCommande','livreLe','majLe','majPar','id']));
       allow delete: if false;
     }
-    // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire ou le responsable portefeuille.
+    // Plan annuel (cibles) et référentiel des axes : modifiés par le propriétaire, le responsable portefeuille ou un conseiller (version 1.9.2).
     match /cade_param/{id} {
       allow read: if canRead();
-      allow write: if isMgr();
+      allow write: if isMgr() || isConseiller();
     }
   }
 }

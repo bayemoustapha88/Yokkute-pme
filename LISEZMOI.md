@@ -141,3 +141,9 @@ Les repères en wolof, la bibliothèque d'actions, les réponses proposées dans
 - Version 1.9.1 : le classeur a une feuille par mois (Janvier à Décembre) ; l'application lit les 12 feuilles en un seul import. L'année se règle dans la feuille « Paramètres » : le même modèle sert pour 2027, 2028, etc.
 - Un fichier = une année entière : le réimport d'une même année remplace le précédent.
 - Aucune nouvelle règle Firestore.
+
+## Droits des conseillers (version 1.9.2)
+- Les conseillers peuvent désormais : importer et réimporter le journal des recettes (onglet Caisse), importer la liste des adhérents (onglet Base des adhérents) et modifier le plan annuel (cibles, tarifs, catalogue PE).
+- Chaque import garde le nom de la personne qui l'a fait, et le plan affiche « Enregistré le … par … ».
+- Restent réservés au propriétaire et au responsable portefeuille : inscription d'adhérents dans la cohorte suivie, retrait du suivi, annulation d'une recette, correction de la saisie d'un collègue.
+- Règles Firestore modifiées (adherents, recettes_import, cade_param) : à publier dans Firebase.

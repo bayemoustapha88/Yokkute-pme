@@ -1,4 +1,4 @@
-/* Yokkute PME — module « Activités CADE » (version 1.9.1 : journal des recettes à une feuille par mois, réutilisable chaque année, chaque recette dans sa section ; v1.8.1 : prestations de service par type, clients hors suivi ; v1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
+/* Yokkute PME — module « Activités CADE » (version 1.9.2 : conseillers autorisés à importer le journal des recettes et la base, et à modifier le plan ; v1.9.1 : journal des recettes à une feuille par mois, réutilisable chaque année, chaque recette dans sa section ; v1.8.1 : prestations de service par type, clients hors suivi ; v1.8 : import du journal des recettes de la caisse ; v1.7.1 : adhésions gratuites des programmes partenaires ; v1.7 : base des adhérents et cohortes ; v1.6 : recettes de la Plateforme électronique (PE) ; v1.5 : exports PDF / Word / Excel, pilotage ouvert à toute l'équipe).
    Référentiel des 9 axes de la fiche de poste, plan annuel (objectifs), journal des réalisations,
    ventes de cartes d'adhésion et tableau de bord prévu / réalisé.
    Collections Firestore : realisations, adhesions, adherents et recettes_import (lots importés), recettes_pe, cade_param. */
@@ -173,6 +173,8 @@ function role(){ return ME() ? ME().role : ""; }
 function isOwner(){ return role()==="proprietaire"; }
 function isMgr(){ return role()==="proprietaire" || role()==="chef"; }
 function isAccueil(){ return role()==="accueil"; }
+/* Version 1.9.2 : les conseillers importent et modifient aussi le journal des recettes, la base des adhérents et le plan annuel (chaque import et chaque plan garde le nom de son auteur). */
+function canImporter(){ return isConsLike(); }
 function isConsLike(){ return role()==="proprietaire" || role()==="chef" || role()==="conseiller"; }
 function canSaisir(){ return isConsLike() || isAccueil(); }
 function isPE(){ return role()==="pe"; }
@@ -306,7 +308,7 @@ function rulesWarn(){
 /* ================= Écran : tableau de bord ================= */
 function vTableau(){
   var per=C.per, K=calc(per), P=K.P, Pl=plan(per.annee), part=P.part, ec=ecoule(P), h=perSelect()+barreExport("Télécharger le rapport de la période");
-  if(!Pl.existe) h+='<p class="ro-banner">Les cibles affichées sont des <b>valeurs d\'exemple</b>. Le propriétaire ou le responsable portefeuille les remplace dans « Plan annuel et référentiel ».</p>';
+  if(!Pl.existe) h+='<p class="ro-banner">Les cibles affichées sont des <b>valeurs d\'exemple</b>. Le propriétaire, le responsable portefeuille ou un conseiller les remplace dans « Plan annuel et référentiel ».</p>';
   function fin(lib, real, cibleAn, sous){
     var cib=cibleAn*part, t=pct(real,cib), proj=ec>0 && ec<1 ? real/ec : null;
     return '<div class="card"><span class="small muted">'+lib+'</span><b class="num" style="font-family:var(--f-display);font-size:1.5rem">'+ent(real)+' <span class="small muted">FCFA</span></b>'+barre(t)+
@@ -581,7 +583,7 @@ function importerJournal(){
   toast(I.lignes.length+" recette(s) importée(s)."); C.jimp=null; APP().render();
 }
 function vJournalBloc(){
-  if(!isMgr()) return "";
+  if(!canImporter()) return "";
   var J=journalImporte(), sm=function(c){ return J.filter(function(l){ return l.cat===c; }).reduce(function(s,l){ return s+num(l.montant); },0); };
   var h='<section class="card"><div class="row between"><h2>Journal des recettes de la caisse (import)</h2><label class="btn file-btn">Importer le journal des recettes<input type="file" id="c_jfile" accept=".xls,.xlsx"></label></div>'+
     '<p class="small muted">Remplissez le classeur « Journal des recettes » (une ligne par recette : adhésion, renouvellement, Plateforme électronique, prestation de service) puis importez-le : chaque recette va dans sa section. Le fichier couvre toute l\'année : complétez toujours le même fichier, un nouvel import de la même année remplace le précédent. <a href="Modele_Journal_des_recettes_CADE.xlsx" download>Télécharger le modèle vide</a>.</p>';
@@ -658,11 +660,11 @@ function inscrire(mats, force){
   toast(faits+" entreprise(s) inscrite(s) dans la cohorte "+y+(ignores?" ("+ignores+" déjà suivie(s))":"")+"."); APP().render();
 }
 function vBase(){
-  var y=C.baseAn||Number(TODAY.slice(0,4)), Pl=plan(y), F=baseFiltres(), all=baseRows(y), L=baseFiltrees(), mgr=isMgr(), sel=C.bsel||(C.bsel={});
+  var y=C.baseAn||Number(TODAY.slice(0,4)), Pl=plan(y), F=baseFiltres(), all=baseRows(y), L=baseFiltrees(), mgr=isMgr(), imp=canImporter(), sel=C.bsel||(C.bsel={});
   var tot=all.reduce(function(s,r){ return s+r.montant; },0), nGrat=all.filter(function(r){ return r.gratuite; }).length, cib=cibleCartes(Pl), nbCib=Pl.cartes.reduce(function(a,c){ return a+num(c.cible); },0);
   var coh=String(C.bcoh||Number(TODAY.slice(0,4))), nCoh=suiviesCohorte(coh), places=plan(Number(coh)).places;
   var h='<p class="small muted">Tous les adhérents de la CCIAK, pour le suivi financier des adhésions. Les entreprises accompagnées par le programme Yokkute y sont choisies chaque année et inscrites dans le module Entreprises.</p>';
-  if(mgr) h+='<div class="row between"><span class="small muted">Liste mensuelle des adhérents (export CCIAK ou classeur vérifié avec la colonne « Forme juridique »). Un nouvel import remplace celui de la même année.</span><label class="btn file-btn">Importer une liste d\'adhérents<input type="file" id="c_bfile" accept=".xls,.xlsx"></label></div>';
+  if(imp) h+='<div class="row between"><span class="small muted">Liste mensuelle des adhérents (export CCIAK ou classeur vérifié avec la colonne « Forme juridique »). Un nouvel import remplace celui de la même année.</span><label class="btn file-btn">Importer une liste d\'adhérents<input type="file" id="c_bfile" accept=".xls,.xlsx"></label></div>';
   if(C.bimp) h+=vBaseImport();
   h+='<section class="card"><div class="row between"><h2>Adhérents '+y+'</h2><select id="c_byear" style="width:auto">'+yearOpts(y)+'</select></div><div class="grid g3">'+
     '<div class="card kpi"><span class="v num">'+all.length+'</span><span class="l">adhérents sur '+ent(nbCib)+' cartes visées ('+(pct(all.length,nbCib)==null?"—":pct(all.length,nbCib)+" %")+')'+(nGrat?' · dont '+nGrat+' gratuite(s), '+esc((Pl.gratuites||{}).programme||"programme partenaire"):'')+'</span>'+barre(pct(all.length,nbCib))+'</div>'+
@@ -680,7 +682,7 @@ function vBase(){
   h+='<div class="row between"><span class="small muted">'+L.length+' adhérent(s) affiché(s) · '+ent(L.reduce(function(s,r){ return s+r.montant; },0))+' FCFA</span><div class="row">'+
     (mgr?'<label class="small">Cohorte <select id="c_bcoh" style="width:auto">'+annees().concat([Number(TODAY.slice(0,4))+1]).filter(function(v,i,a){ return a.indexOf(v)===i; }).map(function(a){ return '<option'+(String(a)===coh?" selected":"")+'>'+a+'</option>'; }).join("")+'</select></label><button class="btn sm primary" data-act="c_binsel"'+(nSel?'':' disabled')+'>Inscrire la sélection ('+nSel+')</button>':'')+
     '<button class="btn sm ghost" data-act="c_bxls">Exporter en Excel</button></div></div>';
-  if(!all.length) h+='<p class="empty">Aucun adhérent pour '+y+'.'+(mgr?' Importez la liste des adhérents avec le bouton ci-dessus.':'')+'</p>';
+  if(!all.length) h+='<p class="empty">Aucun adhérent pour '+y+'.'+(imp?' Importez la liste des adhérents avec le bouton ci-dessus.':'')+'</p>';
   else if(!L.length) h+='<p class="empty">Aucun adhérent ne correspond à ces filtres.</p>';
   else { var N=C.bn||100;
     h+='<div class="tablewrap"><table><thead><tr>'+(mgr?'<th style="width:28px"></th>':'')+'<th>Adhérent</th><th class="hide-sm">Commune</th><th class="hide-sm">Forme</th><th>Adhésion</th><th class="num">Montant</th><th>Suivi</th></tr></thead><tbody>';
@@ -702,7 +704,7 @@ function xlsBase(){
 
 /* ================= Écran : plan annuel et référentiel ================= */
 function vPlan(){
-  var y=C.planAnnee, Pl=plan(y), ed=isMgr(), E=C.planEdit && C.planEdit.annee===y ? C.planEdit : null, src=E||Pl;
+  var y=C.planAnnee, Pl=plan(y), ed=isConsLike(), E=C.planEdit && C.planEdit.annee===y ? C.planEdit : null, src=E||Pl;
   var h=rulesWarn()+'<section class="card"><div class="row between"><div><h2>Plan annuel '+y+'</h2><p class="small muted">'+(Pl.existe?"Enregistré le "+fd(Pl.majLe)+" par "+esc(APP().court(Pl.majPar)):"Pas encore enregistré : les valeurs ci-dessous sont des exemples.")+'</p></div>'+
     '<div class="row"><select id="c_plyear" style="width:auto">'+yearOpts(y)+'</select>'+
     (ed && !E?'<button class="btn primary" data-act="c_pledit">Modifier les cibles</button>':'')+'</div></div>';
